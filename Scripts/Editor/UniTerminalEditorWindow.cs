@@ -2,12 +2,9 @@
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace NoSlimes.Util.DevCon.Editor
+namespace NoSlimes.Util.UniTerminal.Editor
 {
-    /// <summary>
-    /// DevCon settings window using UI Toolkit
-    /// </summary>
-    public class DevConEditorWindow : EditorWindow
+    public class UniTerminalEditorWindow : EditorWindow
     {
 
 
@@ -18,22 +15,22 @@ namespace NoSlimes.Util.DevCon.Editor
         private bool includeCheatCommand;
         private bool isDetailedLoggingEnabled;
 
-        [MenuItem("Tools/DevCon/DevCon Window")]
+        [MenuItem("Tools/UniTerminal/UniTerminal Window")]
         public static void ShowWindow()
         {
-            DevConEditorWindow window = GetWindow<DevConEditorWindow>("DevCon");
+            UniTerminalEditorWindow window = GetWindow<UniTerminalEditorWindow>("UniTerminal");
             window.minSize = new Vector2(350, 400);
             window.maxSize = new Vector2(350, 600);
         }
 
         private void OnEnable()
         {
-            commandCache = Resources.Load<ConsoleCommandCache>("DevCon/ConsoleCommandCache");
+            commandCache = Resources.Load<ConsoleCommandCache>("UniTerminal/ConsoleCommandCache");
 
-            isAutoRebuildEnabled = EditorPrefs.GetBool(DevConDefines.AutoRebuildCacheKey, true);
-            includeBuiltInCommands = EditorPrefs.GetBool(DevConDefines.IncludeBuiltInCommandsKey, true);
-            includeCheatCommand = EditorPrefs.GetBool(DevConDefines.IncludeCheatCommandKey, true);
-            isDetailedLoggingEnabled = EditorPrefs.GetBool(DevConDefines.DetailedLoggingKey, false);
+            isAutoRebuildEnabled = EditorPrefs.GetBool(UniTerminalDefines.AutoRebuildCacheKey, true);
+            includeBuiltInCommands = EditorPrefs.GetBool(UniTerminalDefines.IncludeBuiltInCommandsKey, true);
+            includeCheatCommand = EditorPrefs.GetBool(UniTerminalDefines.IncludeCheatCommandKey, true);
+            isDetailedLoggingEnabled = EditorPrefs.GetBool(UniTerminalDefines.DetailedLoggingKey, false);
 
             rootVisualElement.Clear();
         }
@@ -64,7 +61,7 @@ namespace NoSlimes.Util.DevCon.Editor
                 }
             };
 
-            root.Add(new Label("DevCon Settings")
+            root.Add(new Label("UniTerminal Settings")
             {
                 style =
                 {
@@ -94,7 +91,7 @@ namespace NoSlimes.Util.DevCon.Editor
             autoRebuildToggle.OnValueChanged += val =>
             {
                 isAutoRebuildEnabled = val;
-                EditorPrefs.SetBool(DevConDefines.AutoRebuildCacheKey, val);
+                EditorPrefs.SetBool(UniTerminalDefines.AutoRebuildCacheKey, val);
             };
             editorSection.Add(autoRebuildToggle);
 
@@ -102,7 +99,7 @@ namespace NoSlimes.Util.DevCon.Editor
             detailedLoggingToggle.OnValueChanged += val =>
             {
                 isDetailedLoggingEnabled = val;
-                EditorPrefs.SetBool(DevConDefines.DetailedLoggingKey, val);
+                EditorPrefs.SetBool(UniTerminalDefines.DetailedLoggingKey, val);
             };
             editorSection.Add(detailedLoggingToggle);
 
@@ -143,11 +140,11 @@ namespace NoSlimes.Util.DevCon.Editor
             includeBuiltInCommands = value;
 
             if (includeBuiltInCommands)
-                DevConDefines.EnableBuiltinCommands();
+                UniTerminalDefines.EnableBuiltinCommands();
             else
-                DevConDefines.DisableBuiltinCommands();
+                UniTerminalDefines.DisableBuiltinCommands();
 
-            EditorPrefs.SetBool(DevConDefines.IncludeBuiltInCommandsKey, value);
+            EditorPrefs.SetBool(UniTerminalDefines.IncludeBuiltInCommandsKey, value);
             SaveCache();
         }
 
@@ -156,11 +153,11 @@ namespace NoSlimes.Util.DevCon.Editor
             includeCheatCommand = value;
 
             if (includeCheatCommand)
-                DevConDefines.EnableBuiltinCheatCommand();
+                UniTerminalDefines.EnableBuiltinCheatCommand();
             else
-                DevConDefines.DisableBuiltinCheatCommand();
+                UniTerminalDefines.DisableBuiltinCheatCommand();
 
-            EditorPrefs.SetBool(DevConDefines.IncludeCheatCommandKey, value);
+            EditorPrefs.SetBool(UniTerminalDefines.IncludeCheatCommandKey, value);
             SaveCache();
         }
 

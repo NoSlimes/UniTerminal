@@ -1,8 +1,8 @@
 using UnityEditor;
 
-namespace NoSlimes.Util.DevCon.Editor
+namespace NoSlimes.Util.UniTerminal.Editor
 {
-    [CustomEditor(typeof(DeveloperConsoleUI))]
+    [CustomEditor(typeof(UniTerminalUI))]
     internal class DeveloperConsoleEditor : UnityEditor.Editor
     {
         #region Serialized Properties
@@ -87,10 +87,10 @@ namespace NoSlimes.Util.DevCon.Editor
 #if ENABLE_INPUT_SYSTEM
                 EditorGUILayout.PropertyField(inputSystemProp);
 
-                DeveloperConsoleUI.InputSystemType selectedInputSystem = (DeveloperConsoleUI.InputSystemType)inputSystemProp.enumValueIndex;
+                UniTerminalUI.InputSystemType selectedInputSystem = (UniTerminalUI.InputSystemType)inputSystemProp.enumValueIndex;
 
                 EditorGUILayout.Space(2);
-                if (selectedInputSystem == DeveloperConsoleUI.InputSystemType.New)
+                if (selectedInputSystem == UniTerminalUI.InputSystemType.New)
                 {
                     EditorGUILayout.PropertyField(toggleConsoleActionProp);
                     EditorGUILayout.PropertyField(autoCompleteActionProp);

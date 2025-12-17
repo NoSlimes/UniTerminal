@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace NoSlimes.Util.DevCon
+namespace NoSlimes.Util.UniTerminal
 {
     internal class ConsoleCommandCache : ScriptableObject
     {

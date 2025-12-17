@@ -1,25 +1,25 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace NoSlimes.Util.DevCon.Editor
+namespace NoSlimes.Util.UniTerminal.Editor
 {
     public static class DeveloperConsoleCreator
     {
-        [MenuItem("Assets/Create/DevCon/Developer Console", priority = 81)]
-        [MenuItem("Tools/DevCon/Create Developer Console Prefab", priority = 81)]
+        [MenuItem("Assets/Create/UniTerminal/UniTerminal", priority = 81)]
+        [MenuItem("Tools/UniTerminal/Create UniTerminal Prefab", priority = 81)]
         private static void CreateDeveloperConsole()
         {
-            var prefab = Resources.Load<GameObject>("DevCon/DeveloperConsole");
+            var prefab = Resources.Load<GameObject>("UniTerminal/UniTerminal");
 
             var newPrefab = CreatePrefabVariant(prefab);
             if (newPrefab != null)
             {
                 InstantiateInScene(newPrefab);
-                Debug.Log("[DevCon] Developer Console prefab created and instantiated in the scene.");
+                Debug.Log("[UniTerminal] UniTerminal prefab created and instantiated in the scene.");
             }
             else
             {
-                Debug.LogError("[DevCon] Failed to create Developer Console prefab.");
+                Debug.LogError("[UniTerminal] Failed to create UniTerminal prefab.");
             }
         }
 
@@ -27,7 +27,7 @@ namespace NoSlimes.Util.DevCon.Editor
         {
             if (sourcePrefab == null)
             {
-                Debug.LogError("[DevCon] Source prefab is null.");
+                Debug.LogError("[UniTerminal] Source prefab is null.");
                 return null;
             }
 
@@ -54,7 +54,7 @@ namespace NoSlimes.Util.DevCon.Editor
             }
             else
             {
-                Debug.Log("[DevCon] No folder selected in Project window, defaulting to 'Assets'.");
+                Debug.Log("[UniTerminal] No folder selected in Project window, defaulting to 'Assets'.");
             }
             return path;
         }

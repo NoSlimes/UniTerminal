@@ -1,6 +1,6 @@
 using System;
 
-namespace NoSlimes.Util.DevCon
+namespace NoSlimes.Util.UniTerminal
 {
     [Flags]
     public enum CommandFlags

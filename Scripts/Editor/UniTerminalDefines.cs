@@ -5,23 +5,23 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEngine;
 
-namespace NoSlimes.Util.DevCon.Editor
+namespace NoSlimes.Util.UniTerminal.Editor
 {
     [InitializeOnLoad]
-    internal static class DevConDefines
+    internal static class UniTerminalDefines
     {
-        private static readonly string DEVCON_DEFINE = "DEVCON";
-        private static readonly string DEVCON_BUILTIN = "DEVCON_BUILTIN";
-        private static readonly string DEVCON_ENABLECHEATS = "DEVCON_ENABLECHEATS";
+        private static readonly string UNITERMINAL_DEFINE = "UNITERMINAL";
+        private static readonly string UNITERMINAL_BUILTIN = "UNITERMINAL_BUILTIN";
+        private static readonly string UNITERMINAL_ENABLECHEATS = "UNITERMINAL_ENABLECHEATS";
 
         internal static string KeyPrefix => $"{PlayerSettings.companyName}_{PlayerSettings.productName}_{PlayerSettings.productGUID}";
 
-        internal static string AutoRebuildCacheKey => $"{KeyPrefix}_DevCon_AutoRebuildCache";
-        internal static string IncludeBuiltInCommandsKey => $"{KeyPrefix}_DevCon_IncludeBuiltInCommands";
-        internal static string IncludeCheatCommandKey => $"{KeyPrefix}_DevCon_IncludeCheatCommand";
-        internal static string DetailedLoggingKey => $"{KeyPrefix}_DevCon_DetailedLogging";
+        internal static string AutoRebuildCacheKey => $"{KeyPrefix}_UniTerminal_AutoRebuildCache";
+        internal static string IncludeBuiltInCommandsKey => $"{KeyPrefix}_UniTerminal_IncludeBuiltInCommands";
+        internal static string IncludeCheatCommandKey => $"{KeyPrefix}_UniTerminal_IncludeCheatCommand";
+        internal static string DetailedLoggingKey => $"{KeyPrefix}_UniTerminal_DetailedLogging";
 
-        static DevConDefines()
+        static UniTerminalDefines()
         {
             static void ApplyDefines()
             {
@@ -43,14 +43,14 @@ namespace NoSlimes.Util.DevCon.Editor
 
             EditorApplication.delayCall += ApplyDefines;
 
-            DefineSymbol(DEVCON_DEFINE);
+            DefineSymbol(UNITERMINAL_DEFINE);
         }
 
-        public static void EnableBuiltinCommands() => DefineSymbol(DEVCON_BUILTIN);
-        public static void DisableBuiltinCommands() => UndefineSymbol(DEVCON_BUILTIN);
+        public static void EnableBuiltinCommands() => DefineSymbol(UNITERMINAL_BUILTIN);
+        public static void DisableBuiltinCommands() => UndefineSymbol(UNITERMINAL_BUILTIN);
 
-        public static void EnableBuiltinCheatCommand() => DefineSymbol(DEVCON_ENABLECHEATS);
-        public static void DisableBuiltinCheatCommand() => UndefineSymbol(DEVCON_ENABLECHEATS);
+        public static void EnableBuiltinCheatCommand() => DefineSymbol(UNITERMINAL_ENABLECHEATS);
+        public static void DisableBuiltinCheatCommand() => UndefineSymbol(UNITERMINAL_ENABLECHEATS);
 
         private static void DefineSymbol(string symbol)
         {

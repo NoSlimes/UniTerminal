@@ -1,5 +1,5 @@
 {
-    "name": "NoSlimes.DevCon.Editor",
+    "name": "NoSlimes.UniTerminal.Editor",
     "rootNamespace": "",
     "references": [
         "GUID:3857b2fc56092ac46a9d30f441772494"

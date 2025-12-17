@@ -4,11 +4,11 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace NoSlimes.Util.DevCon
+namespace NoSlimes.Util.UniTerminal
 {
     internal static class BuiltInCommands
     {
-#if DEVCON_BUILTIN
+#if UNITERMINAL_BUILTIN
         #region Application
 
         [ConsoleCommand("quit", "Quits the application.")]
@@ -224,7 +224,7 @@ namespace NoSlimes.Util.DevCon
         #endregion
 #endif
 
-#if DEVCON_ENABLECHEATS
+#if UNITERMINAL_ENABLECHEATS
         [ConsoleCommand("enableCheats", "Enables cheat commands.")]
         private static void EnableCheatsCommand(Action<string> response, bool enable = true)
         {

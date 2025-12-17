@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
-using static NoSlimes.Util.DevCon.ConsoleCommandCache;
+using static NoSlimes.Util.UniTerminal.ConsoleCommandCache;
 
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
-namespace NoSlimes.Util.DevCon
+namespace NoSlimes.Util.UniTerminal
 {
 #if UNITY_EDITOR
     [InitializeOnLoad]
@@ -25,8 +25,8 @@ namespace NoSlimes.Util.DevCon
 
 #if UNITY_EDITOR
         internal static string KeyPrefix => $"{PlayerSettings.companyName}_{PlayerSettings.productName}_{PlayerSettings.productGUID}";
-        private static string AutoRebuildCacheKey => $"{KeyPrefix}_DevCon_AutoRebuildCache";
-        private static string DetailedLoggingKey => $"{KeyPrefix}_DevCon_DetailedLogging";
+        private static string AutoRebuildCacheKey => $"{KeyPrefix}_UniTerminal_AutoRebuildCache";
+        private static string DetailedLoggingKey => $"{KeyPrefix}_UniTerminal_DetailedLogging";
 
         static ConsoleCommandRegistry()
         {
@@ -45,7 +45,7 @@ namespace NoSlimes.Util.DevCon
                 EditorApplication.delayCall += callback;
         }
 
-        [MenuItem("Tools/DevCon/Manual Build Command Cache")]
+        [MenuItem("Tools/UniTerminal/Manual Build Command Cache")]
         public static void DiscoverCommandsEditor()
         {
             DiscoverCommands(AppDomain.CurrentDomain.GetAssemblies());
@@ -84,7 +84,7 @@ namespace NoSlimes.Util.DevCon
                             {
                                 if (!m.IsStatic && !t.IsSubclassOf(typeof(UnityEngine.Object)))
                                 {
-                                    Debug.LogError($"[DevCon] Non-static command '{attr.Command}' in '{t.Name}.{m.Name}' is in a standard C# class. Must be static. Skipping.");
+                                    Debug.LogError($"[UniTerminal] Non-static command '{attr.Command}' in '{t.Name}.{m.Name}' is in a standard C# class. Must be static. Skipping.");
                                     continue;
                                 }
 
@@ -93,15 +93,15 @@ namespace NoSlimes.Util.DevCon
                         }
                         catch (MissingMethodException ex)
                         {
-                            Debug.LogWarning($"[DevCon] Skipped command in '{t.Name}.{m.Name}'. Missing Method (likely attribute version mismatch): {ex.Message}");
+                            Debug.LogWarning($"[UniTerminal] Skipped command in '{t.Name}.{m.Name}'. Missing Method (likely attribute version mismatch): {ex.Message}");
                         }
                         catch (TypeLoadException ex)
                         {
-                            Debug.LogWarning($"[DevCon] Skipped command in '{t.Name}.{m.Name}'. Type Load Error: {ex.Message}");
+                            Debug.LogWarning($"[UniTerminal] Skipped command in '{t.Name}.{m.Name}'. Type Load Error: {ex.Message}");
                         }
                         catch (Exception ex)
                         {
-                            Debug.LogError($"[DevCon] Error processing method '{m.Name}' in type '{t.Name}': {ex}");
+                            Debug.LogError($"[UniTerminal] Error processing method '{m.Name}' in type '{t.Name}': {ex}");
                         }
                     }
                 }
@@ -125,14 +125,14 @@ namespace NoSlimes.Util.DevCon
 #if UNITY_EDITOR
         private static void UpdateCacheEditor(List<MethodInfo> methods)
         {
-            _cache = Resources.Load<ConsoleCommandCache>("DevCon/ConsoleCommandCache");
+            _cache = Resources.Load<ConsoleCommandCache>("UniTerminal/ConsoleCommandCache");
             if (_cache == null)
             {
-                string folderPath = "Assets/Resources/DevCon";
+                string folderPath = "Assets/Resources/UniTerminal";
                 if (!AssetDatabase.IsValidFolder("Assets/Resources"))
                     AssetDatabase.CreateFolder("Assets", "Resources");
                 if (!AssetDatabase.IsValidFolder(folderPath))
-                    AssetDatabase.CreateFolder("Assets/Resources", "DevCon");
+                    AssetDatabase.CreateFolder("Assets/Resources", "UniTerminal");
 
                 _cache = ScriptableObject.CreateInstance<ConsoleCommandCache>();
                 AssetDatabase.CreateAsset(_cache, folderPath + "/ConsoleCommandCache.asset");
@@ -163,7 +163,7 @@ namespace NoSlimes.Util.DevCon
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            Debug.Log($"[DevConsole] Built command cache with {_cache.Commands.Length} entries.");
+            Debug.Log($"[UniTerminal] Built command cache with {_cache.Commands.Length} entries.");
 
             if (detailedLogging)
             {
@@ -180,13 +180,13 @@ namespace NoSlimes.Util.DevCon
                 var prevEntry = previousCommands.FirstOrDefault(e => e.CommandName == entry.CommandName);
                 if (prevEntry == null)
                 {
-                    Debug.Log($"[DevConsole] New command added: {entry.CommandName}");
+                    Debug.Log($"[UniTerminal] New command added: {entry.CommandName}");
                 }
                 else
                 {
                     if (prevEntry.DeclaringType != entry.DeclaringType || prevEntry.MethodName != entry.MethodName || prevEntry.Flags != entry.Flags)
                     {
-                        Debug.Log($"[DevConsole] Command modified: {entry.CommandName} (was {prevEntry.DeclaringType}.{prevEntry.MethodName}, now {entry.DeclaringType}.{entry.MethodName})");
+                        Debug.Log($"[UniTerminal] Command modified: {entry.CommandName} (was {prevEntry.DeclaringType}.{prevEntry.MethodName}, now {entry.DeclaringType}.{entry.MethodName})");
                     }
                 }
             }
@@ -194,7 +194,7 @@ namespace NoSlimes.Util.DevCon
             {
                 if (!currentCommands.Any(e => e.CommandName == prevEntry.CommandName))
                 {
-                    Debug.Log($"[DevConsole] Command removed: {prevEntry.CommandName}");
+                    Debug.Log($"[UniTerminal] Command removed: {prevEntry.CommandName}");
                 }
             }
         }
@@ -217,9 +217,9 @@ namespace NoSlimes.Util.DevCon
         {
             System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            _cache = Resources.Load<ConsoleCommandCache>("DevCon/ConsoleCommandCache");
+            _cache = Resources.Load<ConsoleCommandCache>("UniTerminal/ConsoleCommandCache");
             if (_cache == null)
-                throw new InvalidOperationException("ConsoleCommandCache asset not found at 'Resources/DevCon/ConsoleCommandCache'");
+                throw new InvalidOperationException("ConsoleCommandCache asset not found at 'Resources/UniTerminal/ConsoleCommandCache'");
 
             _commands.Clear();
 
@@ -228,7 +228,7 @@ namespace NoSlimes.Util.DevCon
                 Type type = Type.GetType(entry.DeclaringType);
                 if (type == null)
                 {
-                    Debug.LogWarning($"[DevConsole] Type '{entry.DeclaringType}' not found.");
+                    Debug.LogWarning($"[UniTerminal] Type '{entry.DeclaringType}' not found.");
                     continue;
                 }
 
@@ -238,7 +238,7 @@ namespace NoSlimes.Util.DevCon
 
                 if (methods.Length == 0)
                 {
-                    Debug.LogWarning($"[DevConsole] Method '{entry.MethodName}' not found on type '{type.FullName}'.");
+                    Debug.LogWarning($"[UniTerminal] Method '{entry.MethodName}' not found on type '{type.FullName}'.");
                     continue;
                 }
 
@@ -260,7 +260,7 @@ namespace NoSlimes.Util.DevCon
 
             if (runtimeAssemblies.Count > 0)
             {
-                Debug.Log($"[DevConsole] Discovering commands in {runtimeAssemblies.Count} runtime assemblies.");
+                Debug.Log($"[UniTerminal] Discovering commands in {runtimeAssemblies.Count} runtime assemblies.");
                 DiscoverCommands(runtimeAssemblies, false);
             }
 

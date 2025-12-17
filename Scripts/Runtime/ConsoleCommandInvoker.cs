@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
-namespace NoSlimes.Util.DevCon
+namespace NoSlimes.Util.UniTerminal
 {
     public partial class ConsoleCommandInvoker
     {
@@ -473,7 +473,7 @@ namespace NoSlimes.Util.DevCon
                     {
                         SuggestionMethodCache[method] = null;
                         LogHandler(Colorize($"Could not find static IEnumerable<string> {attr.AutoCompleteProvider}() in {method.DeclaringType.Name}", Settings.WarningColor), false);
-                        Debug.LogWarning($"[DevCon] Could not find static IEnumerable<string> {attr.AutoCompleteProvider}() in {method.DeclaringType.Name}");
+                        Debug.LogWarning($"[UniTerminal] Could not find static IEnumerable<string> {attr.AutoCompleteProvider}() in {method.DeclaringType.Name}");
                     }
                 }
 
@@ -505,7 +505,7 @@ namespace NoSlimes.Util.DevCon
                             LogHandler(Colorize($"AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).", Settings.WarningColor), false);
 #endif
 
-                            Debug.LogWarning($"[DevCon] AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).");
+                            Debug.LogWarning($"[UniTerminal] AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).");
                             break;
                     }
                 }

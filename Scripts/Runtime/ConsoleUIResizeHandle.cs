@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-namespace NoSlimes.Util.DevCon
+namespace NoSlimes.Util.UniTerminal
 {
     internal class ConsoleUIResizeHandle : MonoBehaviour, IBeginDragHandler, IDragHandler
     {

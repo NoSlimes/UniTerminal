@@ -1,20 +1,24 @@
 {
-  "name": "com.noslimes.devcon",
-  "version": "1.6.2",
-  "displayName": "DevCon",
-  "description": "An in-game console for entering and running commands",
-  "unity": "2022.3",
+  "name": "com.noslimes.uniterminal",
+  "version": "2.0.0",
+  "displayName": "UniTerminal - In-Game Command Console",
+  "description": "An in-game command terminal for Unity, supporting logs and runtime commands",
+  "unity": "6000.0",
   "author": {
     "name": "NoSlimes"
   },
   "keywords": [
     "console",
+    "terminal",
     "debug",
-    "tool"
+    "tool",
+    "runtime",
+    "commands"
   ],
   "repository": {
   "type": "git",
-  "url": "https://github.com/NoSlimes/DevCon.git"
+  "url": "https://github.com/NoSlimes/UniTerminal.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "licenseUrl": "https://github.com/NoSlimes/UniTerminal/LICENSE.md"
 }

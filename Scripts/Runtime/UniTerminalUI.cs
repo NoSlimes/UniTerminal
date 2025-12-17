@@ -12,11 +12,11 @@ using System.Text.RegularExpressions;
 using UnityEngine.InputSystem;
 #endif
 
-namespace NoSlimes.Util.DevCon
+namespace NoSlimes.Util.UniTerminal
 {
-    public class DeveloperConsoleUI : MonoBehaviour
+    public class UniTerminalUI : MonoBehaviour
     {
-        private static DeveloperConsoleUI _instance;
+        private static UniTerminalUI _instance;
 
         public enum InputSystemType { New, Old }
 
@@ -136,7 +136,7 @@ namespace NoSlimes.Util.DevCon
         private void HandleCacheLoaded(double ms)
         {
             int totalMethods = ConsoleCommandRegistry.Commands.Sum(kv => kv.Value.Count);
-            LogToConsole($"[DevConsole] Loaded {totalMethods} commands in {ms:F3} ms.");
+            LogToConsole($"[UniTerminal] Loaded {totalMethods} commands in {ms:F3} ms.");
             ConsoleCommandRegistry.OnCacheLoaded -= HandleCacheLoaded;
         }
 
