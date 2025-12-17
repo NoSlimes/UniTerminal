@@ -1,8 +1,8 @@
 ## Setup
 
 Use the menu to create and add the Developer Console prefab to your scene:  
-- `Assets → Create → DevCon → Developer Console`  
-- `Tools → DevCon → Create Developer Console Prefab`  
+- `Assets → Create → UniTerminal → UniTerminal`  
+- `Tools → UniTerminal → Create UniTerminal Prefab`  
 
 This will create a prefab variant in the folder currently open in the Project window.
 
@@ -35,7 +35,7 @@ public static void SetFOVCommand(Action<string, bool> response, float fov)
 
 ### 2. Arguments
 
-DevCon supports a wide range of argument types, with automatic type conversion from strings:
+UniTerminal supports a wide range of argument types, with automatic type conversion from strings:
 
 | Type | Description | Example Input |
 |------|-------------|---------------|
@@ -68,7 +68,7 @@ public static void ScreenshotCommand(Action<string> response, string filename = 
 spawnEnemy "Big Slime" (0,1,0) true
 ```
 
-* **Type conversion:** DevCon automatically converts argument strings to the required type. Errors are logged if conversion fails.
+* **Type conversion:** UniTerminal automatically converts argument strings to the required type. Errors are logged if conversion fails.
 
 * **Nullable types:** Nullable parameters are supported, e.g., `int?`, `float?`.
 
@@ -89,7 +89,7 @@ ConsoleCommandInvoker.RegisterArgConverter<Vector3>(arg =>
 });
 ```
 
-Once registered, DevCon will automatically convert arguments of that type when invoking commands.
+Once registered, UniTerminal will automatically convert arguments of that type when invoking commands.
 
 ---
 
@@ -135,7 +135,7 @@ Commands can include **flags** to control when and how they are available. Flags
 
 **Cheat Commands Note:**
 
-* DevCon includes a built-in `enablecheats` command to toggle cheat commands globally.  
+* UniTerminal includes a built-in `enablecheats` command to toggle cheat commands globally.  
 * Alternatively, you can disable the built-in command and provide your own mechanism for enabling cheats by setting `ConsoleCommandInvoker.CheatsEnabled` manually.  
 * Commands with the `Cheat` flag will only run if `CheatsEnabled` is `true`.
 
@@ -157,7 +157,7 @@ Here is the updated section 6, expanded to include the new functionality for reg
 
 ### 6. Auto-completion & Suggestions
 
-DevCon supports tab-based auto-completion for both command names and argument values.
+UniTerminal supports tab-based auto-completion for both command names and argument values.
 
 *   **Command Names:** Unmatched text is automatically completed against registered commands (case-insensitive).
 *   **Built-in Types:** Arguments of type `bool` (`true`/`false`) and `enum` are automatically auto-completed.
@@ -171,7 +171,7 @@ You can provide dynamic suggestions for your string arguments (e.g., Item IDs, E
 2.  Pass the method's name to the `AutoCompleteProvider` property in the attribute.
 
 **Supported Method Signatures:**
-DevCon automatically detects the parameters of your provider method. You can choose the signature that best fits your complexity needs:
+UniTerminal automatically detects the parameters of your provider method. You can choose the signature that best fits your complexity needs:
 
 | Signature | Who Filters? | Description |
 | :--- | :--- | :--- |
@@ -263,4 +263,4 @@ private static IEnumerable<string> GiveSuggestions(string prefix, int index)
 }
 ```
 
-*Note: If a suggestion contains spaces (e.g., `"Big Slime"`), DevCon will automatically wrap it in quotes when selected.*
+*Note: If a suggestion contains spaces (e.g., `"Big Slime"`), UniTerminal will automatically wrap it in quotes when selected.*
