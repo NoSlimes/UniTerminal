@@ -136,7 +136,7 @@ namespace NoSlimes.Util.UniTerminal
         private static readonly Dictionary<MethodInfo, MethodInfo> SuggestionMethodCache = new();
         private static readonly Dictionary<Type, UnityEngine.Object> UnityInstanceCache = new();
 
-        public static void RegisterArgConverter<T>(Func<string, T> converter)
+        internal static void RegisterArgConverter<T>(Func<string, T> converter)
         {
             ArgConverters[typeof(T)] = arg => converter(arg);
         }
@@ -176,6 +176,11 @@ namespace NoSlimes.Util.UniTerminal
             if (targetType == typeof(bool) && bool.TryParse(arg, out bool b)) return b;
             if (targetType.IsEnum && Enum.TryParse(targetType, arg, true, out object e)) return e;
             throw new ArgumentException($"Could not convert '{arg}' to {targetType.Name}");
+        }
+
+        internal static void Log(string message, bool success)
+        {
+            LogHandler(message, success);
         }
 
         internal static void Execute(string input)

@@ -14,14 +14,14 @@ namespace NoSlimes.Util.UniTerminal
 #if UNITY_EDITOR
     [InitializeOnLoad]
 #endif
-    public static class ConsoleCommandRegistry
+    internal static class ConsoleCommandRegistry
     {
         private static ConsoleCommandCache _cache;
         private static readonly HashSet<Assembly> runtimeAssemblies = new();
         private static readonly Dictionary<string, List<MethodInfo>> _commands = new();
 
-        public static IReadOnlyDictionary<string, List<MethodInfo>> Commands => _commands;
-        public static event Action<double> OnCacheLoaded;
+        internal static IReadOnlyDictionary<string, List<MethodInfo>> Commands => _commands;
+        internal static event Action<double> OnCacheLoaded;
 
 #if UNITY_EDITOR
         internal static string KeyPrefix => $"{PlayerSettings.companyName}_{PlayerSettings.productName}_{PlayerSettings.productGUID}";
@@ -46,7 +46,7 @@ namespace NoSlimes.Util.UniTerminal
         }
 
         [MenuItem("Tools/UniTerminal/Manual Build Command Cache")]
-        public static void DiscoverCommandsEditor()
+        internal static void DiscoverCommandsEditor()
         {
             DiscoverCommands(AppDomain.CurrentDomain.GetAssemblies());
         }
@@ -125,7 +125,7 @@ namespace NoSlimes.Util.UniTerminal
 #if UNITY_EDITOR
         private static void UpdateCacheEditor(List<MethodInfo> methods)
         {
-            _cache = Resources.Load<ConsoleCommandCache>("UniTerminal/ConsoleCommandCache");
+            _cache = Resources.Load<ConsoleCommandCache>("UniTerminal/UniTerminalCommandCache");
             if (_cache == null)
             {
                 string folderPath = "Assets/Resources/UniTerminal";
@@ -135,7 +135,7 @@ namespace NoSlimes.Util.UniTerminal
                     AssetDatabase.CreateFolder("Assets/Resources", "UniTerminal");
 
                 _cache = ScriptableObject.CreateInstance<ConsoleCommandCache>();
-                AssetDatabase.CreateAsset(_cache, folderPath + "/ConsoleCommandCache.asset");
+                AssetDatabase.CreateAsset(_cache, folderPath + "/UniTerminalCommandCache.asset");
             }
 
             List<CommandEntry> previousCommands = null;
@@ -200,7 +200,7 @@ namespace NoSlimes.Util.UniTerminal
         }
 #endif
 
-        public static void DiscoverCommandsInAssembly(Assembly assembly)
+        internal static void DiscoverCommandsInAssembly(Assembly assembly)
         {
             if (assembly == null)
                 throw new ArgumentNullException(nameof(assembly));
@@ -217,9 +217,9 @@ namespace NoSlimes.Util.UniTerminal
         {
             System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            _cache = Resources.Load<ConsoleCommandCache>("UniTerminal/ConsoleCommandCache");
+            _cache = Resources.Load<ConsoleCommandCache>("UniTerminal/UniTerminalCommandCache");
             if (_cache == null)
-                throw new InvalidOperationException("ConsoleCommandCache asset not found at 'Resources/UniTerminal/ConsoleCommandCache'");
+                throw new InvalidOperationException("UniTerminalCommandCache asset not found at 'Resources/UniTerminal/UniTerminalCommandCache'");
 
             _commands.Clear();
 

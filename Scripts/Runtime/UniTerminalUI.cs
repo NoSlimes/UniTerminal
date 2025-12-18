@@ -14,7 +14,7 @@ using UnityEngine.InputSystem;
 
 namespace NoSlimes.Util.UniTerminal
 {
-    public class UniTerminalUI : MonoBehaviour
+    internal class UniTerminalUI : MonoBehaviour
     {
         private static UniTerminalUI _instance;
 
@@ -37,7 +37,8 @@ namespace NoSlimes.Util.UniTerminal
         [SerializeField] private int maxLogLines = 100;
         [SerializeField] private bool dontDestroyOnLoad = true;
         [SerializeField] private bool catchUnityLogs = true;
-        [SerializeField] private bool controlCursorLockMode = false;
+        [SerializeField] private bool controlCursorLockMode = true;
+        [SerializeField] private bool loadCacheOnAwake = true;
         [SerializeField] private char commandSeparator = '|';
 
         [SerializeField] private Color backgroundColor = new(0f, 0f, 0f, 0.95f);
@@ -67,7 +68,10 @@ namespace NoSlimes.Util.UniTerminal
         private readonly System.Collections.Concurrent.ConcurrentQueue<(string logString, string stackTrace, LogType type)> logQueue = new();
 
         private static readonly Regex TokenizerRegex = new Regex(@"[\""].+?[\""]|[^ ]+", RegexOptions.Compiled);
-        public static event Action<bool> OnConsoleToggled;
+
+        internal static bool IsConsoleVisible => _instance != null && _instance.consolePanel.activeSelf;
+
+        internal static event Action<bool> OnConsoleToggled;
 
         protected virtual void Awake()
         {
@@ -95,8 +99,11 @@ namespace NoSlimes.Util.UniTerminal
             GetComponentInChildren<Canvas>().sortingOrder = 1000;
             if (dontDestroyOnLoad) DontDestroyOnLoad(gameObject);
 
-            ConsoleCommandRegistry.OnCacheLoaded += HandleCacheLoaded;
-            ConsoleCommandRegistry.LoadCache();
+            if (loadCacheOnAwake)
+            {
+                ConsoleCommandRegistry.OnCacheLoaded += HandleCacheLoaded;
+                ConsoleCommandRegistry.LoadCache();
+            }
 
             ConsoleCommandInvoker.LogHandler += LogToConsole;
 
@@ -255,10 +262,12 @@ namespace NoSlimes.Util.UniTerminal
             }
         }
 
-        public void ShowConsole(bool show)
+        public static void ShowConsole(bool show)
         {
-            if (consolePanel.activeSelf != show)
-                ToggleConsole();
+            if (_instance == null) return;
+
+            if (_instance.consolePanel.activeSelf != show)
+                _instance.ToggleConsole();
         }
 
         public static void ClearLog()
@@ -500,17 +509,17 @@ namespace NoSlimes.Util.UniTerminal
 
         #region Built-in basic commands
         [ConsoleCommand("help", "Shows a list of commands or details for one command.")]
-        public static void HelpCommand(Action<string> response, string commandName = "")
+        private static void HelpCommand(Action<string> response, string commandName = "")
         {
             string output = ConsoleCommandInvoker.GetHelp(commandName);
             response(output);
         }
 
         [ConsoleCommand("clear", "Clears the console log.")]
-        public static void ClearCommand() => ClearLog();
+        private static void ClearCommand() => ClearLog();
 
         [ConsoleCommand("toggleUnityLogs", "Toggles display of unity debug logs")]
-        public static void ToggleUnityLogsCommand(Action<string> response)
+        private static void ToggleUnityLogsCommand(Action<string> response)
         {
             if (_instance == null) return;
             _instance.catchUnityLogs = !_instance.catchUnityLogs;

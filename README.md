@@ -79,7 +79,7 @@ spawnEnemy "Big Slime" (0,1,0) true
 * **Custom argument types:** You can register your own converters for custom types. For example, the built-in `Vector3` converter:
 
 ```csharp
-ConsoleCommandInvoker.RegisterArgConverter<Vector3>(arg =>
+UniTerminal.RegisterArgConverter<Vector3>(arg =>
 {
     var parts = arg.Trim('(', ')').Split(',');
     if (parts.Length != 3)
@@ -140,7 +140,7 @@ Commands can include **flags** to control when and how they are available. Flags
 **Cheat Commands Note:**
 
 * UniTerminal includes a built-in `enablecheats` command to toggle cheat commands globally.  
-* Alternatively, you can disable the built-in command and provide your own mechanism for enabling cheats by setting `ConsoleCommandInvoker.CheatsEnabled` manually.  
+* Alternatively, you can disable the built-in command and provide your own mechanism for enabling cheats by setting `UniTerminal.CheatsEnabled` manually.  
 * Commands with the `Cheat` flag will only run if `CheatsEnabled` is `true`.
 
 **Example:**
@@ -268,3 +268,101 @@ private static IEnumerable<string> GiveSuggestions(string prefix, int index)
 ```
 
 *Note: If a suggestion contains spaces (e.g., `"Big Slime"`), UniTerminal will automatically wrap it in quotes when selected.*
+
+---
+
+### 7. Performance & Caching
+
+UniTerminal is designed for **zero startup overhead**. Unlike traditional consoles that scan your assemblies using Reflection every time the game starts (causing lag), UniTerminal pre-calculates and caches command metadata in the Unity Editor.
+
+**When does the cache update?**
+
+1.  **Automatically:** The cache is rebuilt automatically whenever you modify your scripts and trigger a **Recompile / Domain Reload**.
+2.  **Manually:** If for any reason the cache seems out of sync, you can force a rebuild via the menu:
+    *   `Tools → UniTerminal → Manual Build Command Cache`
+
+**What this means for you:**
+*   **Editor:** You simply write code. Commands appear in the console immediately after compilation.
+*   **Builds:** The cached data is serialized into the build. The game launches with **0ms** reflection cost for command discovery.
+
+> **Troubleshooting:** If you just added a `[ConsoleCommand]` but it's not showing up in autocomplete, ensure your scripts have finished compiling. If it still persists, click **Manual Build Command Cache**.
+
+---
+
+### 8. Configuration & Settings
+
+You can configure UniTerminal's behavior via the dedicated settings window. These settings allow you to strip out built-in features to keep your builds lightweight or adjust the editor workflow.
+
+**Open the settings window:**
+*   `Tools → UniTerminal → UniTerminal Window`
+
+#### Runtime & Editor Settings
+These settings modify the **Scripting Define Symbols** of your project. Changing them will trigger a script recompilation.
+
+| Setting | Description |
+| :--- | :--- |
+| **Include Built-In Commands** | If enabled, includes additional utility commands (e.g. time scale or system info). <br><br>Note: The core commands help, clear, and toggleUnityLogs are essential to the system and are always included, regardless of this setting. |
+| **Include Built-In Cheat Command** | If enabled, the enablecheats command is available. Disable this for release builds if you want to prevent users from easily toggling cheat mode (or if you want to implement your own cheat logic). |
+
+#### Editor Workflow
+These settings only affect the Unity Editor environment and are saved in `EditorPrefs`.
+
+| Setting | Description |
+| :--- | :--- |
+| **Auto Rebuild Cache** | **(Recommended: On)** Automatically updates the command cache whenever scripts are compiled. If you have a very large project with slow iteration times, you can turn this off and manually rebuild the cache only when needed. |
+| **Detailed Logging** | If enabled, UniTerminal will log a **change report** to the Unity Console after a cache rebuild, detailing exactly which commands were **Added**, **Removed**, or **Modified**. Useful for verifying that your code changes were detected correctly. |
+
+#### Manual Actions
+*   **Manual Rebuild Command Cache:** Forces a full reflection scan of your assemblies and rebuilds the command database. Use this if the console isn't picking up a new `[ConsoleCommand]` attribute immediately.
+
+---
+
+### 9. Runtime Assembly Discovery (Mods & DLC)
+
+Since UniTerminal caches commands at build time, any code loaded **dynamically** after the game starts (such as Mods, DLCs, or Addressables) will not be in the initial cache. You must manually tell UniTerminal to scan these new assemblies.
+
+#### How to register an assembly
+
+Use `UniTerminal.DiscoverCommandsInAssembly()` to scan a specific assembly for `[ConsoleCommand]` attributes.
+
+**Example 1: Self-Registering Mod**
+If you are building a mod (e.g., for BepInEx), you can have the mod register itself when it loads.
+
+```csharp
+using System.Reflection;
+using UnityEngine;
+using NoSlimes.Util.UniTerminal;
+
+public class MyMod : MonoBehaviour
+{
+    private void Awake()
+    {
+        // Tells UniTerminal to scan THIS assembly for commands immediately
+        UniTerminal.DiscoverCommandsInAssembly(Assembly.GetExecutingAssembly());
+        
+        Debug.Log("MyMod commands registered!");
+    }
+
+    [ConsoleCommand("mod_hello", "Says hello from the mod.")]
+    public static void HelloCommand()
+    {
+        Debug.Log("Hello from MyMod!");
+    }
+}
+```
+
+**Example 2: External Mod Loader**
+If you have a dedicated ModLoader script that loads DLLs from a folder:
+
+```csharp
+public void LoadMod(string path)
+{
+    // Load the DLL
+    Assembly modAssembly = Assembly.LoadFrom(path);
+
+    // Register its commands into the console
+    UniTerminal.DiscoverCommandsInAssembly(modAssembly);
+}
+```
+
+> **Note:** Do not call this for your main game assembly (`Assembly-CSharp`) if you are using the default setup, as those commands are already optimized and cached. This method is specifically for code loaded **after** the game has started.
