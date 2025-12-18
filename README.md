@@ -23,11 +23,15 @@ Action<string, bool> response  // Receives message + success/failure
 **Example:**
 
 ```csharp
-[ConsoleCommand("setFOV", "Sets main camera FOV.")]
-public static void SetFOVCommand(Action<string, bool> response, float fov)
+[ConsoleCommand("heal", "Heals the player.")]
+public static void HealCommand(Action<string, bool> response, int amount)
 {
-    Camera.main.fieldOfView = fov;
-    response($"FOV set to {fov}", true);
+    if (amount < 0) {
+        response("Amount cannot be negative!", false); // Command did not succeed - logs as an error (red)
+        return;
+    }
+    Player.Instance.Heal(amount);
+    response($"Healed player for {amount} HP", true); // Command succeeded - logs normally
 }
 ```
 
