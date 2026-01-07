@@ -1,6 +1,6 @@
 {
   "name": "com.noslimes.uniterminal",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "displayName": "UniTerminal - In-Game Command Console",
   "description": "An in-game command terminal for Unity, supporting logs and runtime commands",
   "unity": "6000.0",
