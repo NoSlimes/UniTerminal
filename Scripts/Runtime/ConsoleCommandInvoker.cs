@@ -347,7 +347,7 @@ namespace NoSlimes.Util.UniTerminal
         private static string GetMethodSignature(MethodInfo method)
         {
             string[] pars = method.GetParameters()
-                .Where(p => !(p.ParameterType == typeof(Action<string>) || p.ParameterType == typeof(Action<string, bool>)))
+                .Where(p => !(p.ParameterType == typeof(Action<string>) || p.ParameterType == typeof(Action<string, bool>) || p.ParameterType == typeof(CommandResponseDelegate)))
                 .Select(p => $"{p.ParameterType.Name} {p.Name}")
                 .ToArray();
 
