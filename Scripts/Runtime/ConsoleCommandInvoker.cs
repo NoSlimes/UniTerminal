@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
+using static NoSlimes.Util.UniTerminal.UniTerminal;
 
 namespace NoSlimes.Util.UniTerminal
 {
@@ -214,7 +215,8 @@ namespace NoSlimes.Util.UniTerminal
 
                 bool hasResponse = parameters.Length > 0 &&
                     (parameters[0].ParameterType == typeof(Action<string>) ||
-                     parameters[0].ParameterType == typeof(Action<string, bool>));
+                     parameters[0].ParameterType == typeof(Action<string, bool>) ||
+                     parameters[0].ParameterType == typeof(CommandResponseDelegate));
 
                 if (hasResponse) paramOffset = 1;
 
@@ -227,9 +229,20 @@ namespace NoSlimes.Util.UniTerminal
                 object[] tempArgs = new object[parameters.Length];
                 if (hasResponse)
                 {
-                    tempArgs[0] = parameters[0].ParameterType == typeof(Action<string, bool>)
-                        ? LogHandler
-                        : new Action<string>(msg => LogHandler(msg, true));
+                    Type callbackType = parameters[0].ParameterType;
+
+                    if (callbackType == typeof(Action<string, bool>))
+                    {
+                        tempArgs[0] = LogHandler;
+                    }
+                    else if (callbackType == typeof(Action<string>))
+                    {
+                        tempArgs[0] = new Action<string>(msg => LogHandler(msg, true));
+                    }
+                    else if (callbackType == typeof(CommandResponseDelegate))
+                    {
+                        tempArgs[0] = new CommandResponseDelegate((msg, success) => LogHandler(msg, success));
+                    }
                 }
 
                 bool success = true;
@@ -494,17 +507,17 @@ namespace NoSlimes.Util.UniTerminal
                         case 1 when providerParams[0].ParameterType == typeof(string):
                             return (IEnumerable<string>)providerMethod.Invoke(null, new object[] { prefix });
                         case 1 when providerParams[0].ParameterType == typeof(int):
-                            {
-                                var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, new object[] { relativeArgIndex });
-                                return (suggestions ?? Array.Empty<string>()) 
-                                    .Where(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-                            }
+                        {
+                            var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, new object[] { relativeArgIndex });
+                            return (suggestions ?? Array.Empty<string>())
+                                .Where(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+                        }
                         case 0:
-                            {
-                                var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, null);
-                                return (suggestions ?? Array.Empty<string>()) 
-                                    .Where(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-                            }
+                        {
+                            var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, null);
+                            return (suggestions ?? Array.Empty<string>())
+                                .Where(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+                        }
                         default:
 #if DEBUG
                             LogHandler(Colorize($"AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).", Settings.WarningColor), false);

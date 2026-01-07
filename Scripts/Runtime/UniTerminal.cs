@@ -103,5 +103,8 @@ namespace NoSlimes.Util.UniTerminal
         }
 
         #endregion
+
     }
+
+    public delegate void CommandResponseDelegate(string message, bool success = true);
 }
