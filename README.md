@@ -15,6 +15,7 @@ When defining commands, methods can have the following parameters:
 ```csharp
 Action<string> response        // Receives console messages
 Action<string, bool> response  // Receives message + success/failure
+CommandResponseDelegate response // Receives message + optional success/failure
 ````
 
 * `string` = message to log
