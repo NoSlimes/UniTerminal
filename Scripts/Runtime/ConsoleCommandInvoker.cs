@@ -332,11 +332,13 @@ namespace NoSlimes.Util.UniTerminal
                 }
                 catch (Exception e)
                 {
-                    string exceptionString = $"{e.InnerException?.Message ?? e.Message}";
+                    var realException = (e is TargetInvocationException && e.InnerException != null) ? e.InnerException : e;
+                    string exceptionString = realException.Message;
 #if DEBUG
-                    exceptionString += Colorize($"\n {e.StackTrace}", Settings.SecondaryErrorColor);
+                    exceptionString += Colorize($"\n{realException.StackTrace}", Settings.SecondaryErrorColor);
 #endif
-                    LogHandler(Colorize($"Error: An exception occurred while executing command '{command}'{exceptionString}", Settings.ErrorColor), false);
+
+                    LogHandler(Colorize($"Error: An exception occurred while executing command '{command}'\n{exceptionString}", Settings.ErrorColor), false);
                 }
             }
             else
@@ -508,7 +510,7 @@ namespace NoSlimes.Util.UniTerminal
                         case 1 when providerParams[0].ParameterType == typeof(string):
                             return (IEnumerable<string>)providerMethod.Invoke(null, new object[] { prefix });
                         case 1 when providerParams[0].ParameterType == typeof(int):
-                        {
+                            {
                                 var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, new object[] { relativeArgIndex });
                                 return (suggestions ?? Array.Empty<string>())
                                     .Where(s => s.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0) // Hitta "bear" i "large beartrap"
@@ -516,7 +518,7 @@ namespace NoSlimes.Util.UniTerminal
                                     .ThenBy(s => s);
                             }
                         case 0:
-                        {
+                            {
                                 var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, null);
                                 return (suggestions ?? Array.Empty<string>())
                                     .Where(s => s.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
