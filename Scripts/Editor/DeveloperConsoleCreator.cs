@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace NoSlimes.Util.UniTerminal.Editor
 {
-    public static class DeveloperConsoleCreator
+    internal static class DeveloperConsoleCreator
     {
         [MenuItem("Assets/Create/UniTerminal/UniTerminal", priority = 81)]
         [MenuItem("Tools/UniTerminal/Create UniTerminal Prefab", priority = 81)]

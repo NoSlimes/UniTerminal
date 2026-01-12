@@ -24,10 +24,6 @@ namespace NoSlimes.Util.UniTerminal
         internal static event Action<double> OnCacheLoaded;
 
 #if UNITY_EDITOR
-        internal static string KeyPrefix => $"{PlayerSettings.companyName}_{PlayerSettings.productName}_{PlayerSettings.productGUID}";
-        private static string AutoRebuildCacheKey => $"{KeyPrefix}_UniTerminal_AutoRebuildCache";
-        private static string DetailedLoggingKey => $"{KeyPrefix}_UniTerminal_DetailedLogging";
-
         static ConsoleCommandRegistry()
         {
             AssemblyReloadEvents.afterAssemblyReload += AfterAssemblyReload;
@@ -41,7 +37,7 @@ namespace NoSlimes.Util.UniTerminal
                 EditorApplication.delayCall -= callback;
             }
 
-            if (EditorPrefs.GetBool(AutoRebuildCacheKey, true))
+            if (UniTerminalSettings.instance.IsAutoRebuildEnabled)
                 EditorApplication.delayCall += callback;
         }
 
@@ -66,19 +62,19 @@ namespace NoSlimes.Util.UniTerminal
 
             List<(MethodInfo Method, ConsoleCommandAttribute Attr)> validCommands = new();
 
-            foreach (var assembly in assemblies)
+            foreach (Assembly assembly in assemblies)
             {
                 Type[] types;
                 try { types = assembly.GetTypes(); }
                 catch (ReflectionTypeLoadException e) { types = e.Types.Where(t => t != null).ToArray(); }
 
-                foreach (var t in types)
+                foreach (Type t in types)
                 {
-                    foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
+                    foreach (MethodInfo m in t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
                     {
                         try
                         {
-                            var attr = m.GetCustomAttribute<ConsoleCommandAttribute>();
+                            ConsoleCommandAttribute attr = m.GetCustomAttribute<ConsoleCommandAttribute>();
 
                             if (attr != null)
                             {
@@ -107,7 +103,7 @@ namespace NoSlimes.Util.UniTerminal
                 }
             }
 
-            foreach (var (method, attribute) in validCommands)
+            foreach ((MethodInfo method, ConsoleCommandAttribute attribute) in validCommands)
             {
                 string commandName = attribute.Command.ToLower();
 
@@ -139,7 +135,7 @@ namespace NoSlimes.Util.UniTerminal
             }
 
             List<CommandEntry> previousCommands = null;
-            bool detailedLogging = EditorPrefs.GetBool(DetailedLoggingKey, false) && _cache.Commands != null;
+            bool detailedLogging = UniTerminalSettings.instance.IsDetailedLoggingEnabled && _cache.Commands != null;
             if (detailedLogging)
             {
                 previousCommands = new List<CommandEntry>(_cache.Commands);
@@ -147,7 +143,7 @@ namespace NoSlimes.Util.UniTerminal
 
             _cache.Commands = methods.Select(static m =>
             {
-                var attr = m.GetCustomAttribute<ConsoleCommandAttribute>();
+                ConsoleCommandAttribute attr = m.GetCustomAttribute<ConsoleCommandAttribute>();
                 return new CommandEntry
                 {
                     CommandName = attr?.Command ?? m.Name,
@@ -175,9 +171,9 @@ namespace NoSlimes.Util.UniTerminal
         {
             if (previousCommands == null) return;
 
-            foreach (var entry in currentCommands)
+            foreach (CommandEntry entry in currentCommands)
             {
-                var prevEntry = previousCommands.FirstOrDefault(e => e.CommandName == entry.CommandName);
+                CommandEntry prevEntry = previousCommands.FirstOrDefault(e => e.CommandName == entry.CommandName);
                 if (prevEntry == null)
                 {
                     Debug.Log($"[UniTerminal] New command added: {entry.CommandName}");
@@ -190,7 +186,7 @@ namespace NoSlimes.Util.UniTerminal
                     }
                 }
             }
-            foreach (var prevEntry in previousCommands)
+            foreach (CommandEntry prevEntry in previousCommands)
             {
                 if (!currentCommands.Any(e => e.CommandName == prevEntry.CommandName))
                 {
@@ -223,7 +219,7 @@ namespace NoSlimes.Util.UniTerminal
 
             _commands.Clear();
 
-            foreach (var entry in _cache.Commands)
+            foreach (CommandEntry entry in _cache.Commands)
             {
                 Type type = Type.GetType(entry.DeclaringType);
                 if (type == null)
@@ -232,7 +228,7 @@ namespace NoSlimes.Util.UniTerminal
                     continue;
                 }
 
-                var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)
+                MethodInfo[] methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)
                                   .Where(m => m.Name == entry.MethodName)
                                   .ToArray();
 
@@ -246,7 +242,7 @@ namespace NoSlimes.Util.UniTerminal
                 if (!_commands.ContainsKey(key))
                     _commands[key] = new List<MethodInfo>();
 
-                foreach (var method in methods)
+                foreach (MethodInfo method in methods)
                 {
                     if (!_commands[key].Contains(method))
                     {
@@ -270,18 +266,15 @@ namespace NoSlimes.Util.UniTerminal
 
         private static bool FilterCommand(MethodInfo method)
         {
-            var attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
+            ConsoleCommandAttribute attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
             if (attribute == null)
                 return false;
 
-            var flags = attribute.Flags;
+            CommandFlags flags = attribute.Flags;
 
             if (flags.HasFlag(CommandFlags.DebugOnly) && !Debug.isDebugBuild)
                 return false;
-            if (flags.HasFlag(CommandFlags.EditorOnly) && !Application.isEditor)
-                return false;
-
-            return true;
+            return !flags.HasFlag(CommandFlags.EditorOnly) || Application.isEditor;
         }
     }
 }

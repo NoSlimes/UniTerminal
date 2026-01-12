@@ -4,16 +4,10 @@ using UnityEngine.UIElements;
 
 namespace NoSlimes.Util.UniTerminal.Editor
 {
-    public class UniTerminalEditorWindow : EditorWindow
+
+    internal class UniTerminalEditorWindow : EditorWindow
     {
-
-
-        private ConsoleCommandCache commandCache;
-
-        private bool isAutoRebuildEnabled;
-        private bool includeBuiltInCommands;
-        private bool includeCheatCommand;
-        private bool isDetailedLoggingEnabled;
+        private UniTerminalSettings settings;
 
         [MenuItem("Tools/UniTerminal/UniTerminal Window")]
         public static void ShowWindow()
@@ -25,29 +19,51 @@ namespace NoSlimes.Util.UniTerminal.Editor
 
         private void OnEnable()
         {
-            commandCache = Resources.Load<ConsoleCommandCache>("UniTerminal/ConsoleCommandCache");
+            settings = UniTerminalSettings.instance;
 
-            isAutoRebuildEnabled = EditorPrefs.GetBool(UniTerminalDefines.AutoRebuildCacheKey, true);
-            includeBuiltInCommands = EditorPrefs.GetBool(UniTerminalDefines.IncludeBuiltInCommandsKey, true);
-            includeCheatCommand = EditorPrefs.GetBool(UniTerminalDefines.IncludeCheatCommandKey, true);
-            isDetailedLoggingEnabled = EditorPrefs.GetBool(UniTerminalDefines.DetailedLoggingKey, false);
+            #region Migrate Old Settings
+
+            if (EditorPrefs.HasKey(UniTerminalDefines.AutoRebuildCacheKey))
+                settings.IsAutoRebuildEnabled = EditorPrefs.GetBool(UniTerminalDefines.AutoRebuildCacheKey, true);
+
+            if (EditorPrefs.HasKey(UniTerminalDefines.IncludeBuiltInCommandsKey))
+                settings.IncludeBuiltInCommands = EditorPrefs.GetBool(UniTerminalDefines.IncludeBuiltInCommandsKey, true);
+
+            if (EditorPrefs.HasKey(UniTerminalDefines.IncludeCheatCommandKey))
+                settings.IncludeCheatCommand = EditorPrefs.GetBool(UniTerminalDefines.IncludeCheatCommandKey, true);
+
+            if (EditorPrefs.HasKey(UniTerminalDefines.DetailedLoggingKey))
+                settings.IsDetailedLoggingEnabled = EditorPrefs.GetBool(UniTerminalDefines.DetailedLoggingKey, false);
+
+            DeleteIfExists(UniTerminalDefines.AutoRebuildCacheKey);
+            DeleteIfExists(UniTerminalDefines.IncludeBuiltInCommandsKey);
+            DeleteIfExists(UniTerminalDefines.IncludeCheatCommandKey);
+            DeleteIfExists(UniTerminalDefines.DetailedLoggingKey);
+
+            static void DeleteIfExists(string editorPrefKey)
+            {
+                if (EditorPrefs.HasKey(editorPrefKey))
+                {
+                    EditorPrefs.DeleteKey(editorPrefKey);
+                }
+            }
+            #endregion
 
             rootVisualElement.Clear();
         }
 
         private void OnDisable()
         {
-            SaveCache();
-            commandCache = null;
+            SaveSettings();
         }
 
         private void CreateGUI()
         {
-            if (commandCache == null)
+            if (settings == null)
                 return;
 
             // Root container
-            var root = new VisualElement
+            VisualElement root = new()
             {
                 style =
                 {
@@ -74,11 +90,11 @@ namespace NoSlimes.Util.UniTerminal.Editor
             // Runtime & Editor section
             VisualElement runtimeSection = CreateSection("Runtime and Editor");
 
-            var includeBuiltInToggle = new ToggleButton("Include Built-In Commands in Cache", includeBuiltInCommands);
+            ToggleButton includeBuiltInToggle = new("Include Built-In Commands in Cache", settings.IncludeBuiltInCommands);
             includeBuiltInToggle.OnValueChanged += SetIncludeBuiltInCommands;
             runtimeSection.Add(includeBuiltInToggle);
 
-            var includeCheatToggle = new ToggleButton("Include Built-In Cheat Command in Cache", includeCheatCommand);
+            ToggleButton includeCheatToggle = new("Include Built-In Cheat Command in Cache", settings.IncludeCheatCommand);
             includeCheatToggle.OnValueChanged += SetIncludeCheatCommand;
             runtimeSection.Add(includeCheatToggle);
 
@@ -87,23 +103,23 @@ namespace NoSlimes.Util.UniTerminal.Editor
             // Editor section
             VisualElement editorSection = CreateSection("Editor");
 
-            var autoRebuildToggle = new ToggleButton("Auto Rebuild Cache", isAutoRebuildEnabled);
+            ToggleButton autoRebuildToggle = new("Auto Rebuild Cache", settings.IsAutoRebuildEnabled);
             autoRebuildToggle.OnValueChanged += val =>
             {
-                isAutoRebuildEnabled = val;
-                EditorPrefs.SetBool(UniTerminalDefines.AutoRebuildCacheKey, val);
+                settings.IsAutoRebuildEnabled = val;
+                SaveSettings();
             };
             editorSection.Add(autoRebuildToggle);
 
-            var detailedLoggingToggle = new ToggleButton("Detailed Logging", isDetailedLoggingEnabled);
+            ToggleButton detailedLoggingToggle = new("Detailed Logging", settings.IsDetailedLoggingEnabled);
             detailedLoggingToggle.OnValueChanged += val =>
             {
-                isDetailedLoggingEnabled = val;
-                EditorPrefs.SetBool(UniTerminalDefines.DetailedLoggingKey, val);
+                settings.IsDetailedLoggingEnabled = val;
+                SaveSettings();
             };
             editorSection.Add(detailedLoggingToggle);
 
-            var rebuildButton = new Button(() => ConsoleCommandRegistry.DiscoverCommandsEditor())
+            Button rebuildButton = new(() => ConsoleCommandRegistry.DiscoverCommandsEditor())
             {
                 text = "Manual Rebuild Command Cache",
                 style =
@@ -137,40 +153,38 @@ namespace NoSlimes.Util.UniTerminal.Editor
 
         private void SetIncludeBuiltInCommands(bool value)
         {
-            includeBuiltInCommands = value;
+            settings.IncludeBuiltInCommands = value;
 
-            if (includeBuiltInCommands)
+            if (settings.IncludeBuiltInCommands)
                 UniTerminalDefines.EnableBuiltinCommands();
             else
                 UniTerminalDefines.DisableBuiltinCommands();
 
-            EditorPrefs.SetBool(UniTerminalDefines.IncludeBuiltInCommandsKey, value);
-            SaveCache();
+            SaveSettings();
         }
 
         private void SetIncludeCheatCommand(bool value)
         {
-            includeCheatCommand = value;
+            settings.IncludeCheatCommand = value;
 
-            if (includeCheatCommand)
+            if (settings.IncludeCheatCommand)
                 UniTerminalDefines.EnableBuiltinCheatCommand();
             else
                 UniTerminalDefines.DisableBuiltinCheatCommand();
 
-            EditorPrefs.SetBool(UniTerminalDefines.IncludeCheatCommandKey, value);
-            SaveCache();
+            SaveSettings();
         }
 
-        private void SaveCache()
+        private void SaveSettings()
         {
-            if (commandCache == null) return;
-            EditorUtility.SetDirty(commandCache);
-            AssetDatabase.SaveAssets();
+            if (settings == null) return;
+            EditorUtility.SetDirty(settings);
+            settings.Save();
         }
 
         private VisualElement CreateSection(string titleText)
         {
-            var container = new VisualElement
+            VisualElement container = new()
             {
                 style =
                 {
@@ -180,7 +194,7 @@ namespace NoSlimes.Util.UniTerminal.Editor
                 }
             };
 
-            var titleLabel = new Label(titleText)
+            Label titleLabel = new(titleText)
             {
                 style =
                 {
@@ -190,7 +204,7 @@ namespace NoSlimes.Util.UniTerminal.Editor
                 }
             };
 
-            var separator = new VisualElement
+            VisualElement separator = new()
             {
                 style =
                 {
@@ -206,7 +220,7 @@ namespace NoSlimes.Util.UniTerminal.Editor
         }
     }
 
-    public class ToggleButton : VisualElement
+    internal class ToggleButton : VisualElement
     {
         public bool Value { get; private set; }
 
@@ -285,12 +299,6 @@ namespace NoSlimes.Util.UniTerminal.Editor
             Value = !Value;
             indicator.style.backgroundColor = Value ? activeColor : inactiveColor;
             OnValueChanged?.Invoke(Value);
-        }
-
-        public void SetValue(bool value)
-        {
-            Value = value;
-            indicator.style.backgroundColor = Value ? activeColor : inactiveColor;
         }
     }
 }

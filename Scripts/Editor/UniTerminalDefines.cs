@@ -25,15 +25,12 @@ namespace NoSlimes.Util.UniTerminal.Editor
         {
             static void ApplyDefines()
             {
-                bool enableBuiltin = EditorPrefs.GetBool(IncludeBuiltInCommandsKey, true);
-                bool enableCheats = EditorPrefs.GetBool(IncludeCheatCommandKey, true);
-
-                if (enableBuiltin)
+                if (UniTerminalSettings.instance.IncludeBuiltInCommands)
                     EnableBuiltinCommands();
                 else
                     DisableBuiltinCommands();
 
-                if (enableCheats)
+                if (UniTerminalSettings.instance.IncludeCheatCommand)
                     EnableBuiltinCheatCommand();
                 else
                     DisableBuiltinCheatCommand();
@@ -70,7 +67,7 @@ namespace NoSlimes.Util.UniTerminal.Editor
                             PlayerSettings.SetScriptingDefineSymbols(namedTarget, string.Join(";", parts));
                         }
 
-                        if (EditorPrefs.GetBool(DetailedLoggingKey, false))
+                        if (UniTerminalSettings.instance.IsDetailedLoggingEnabled)
                             Debug.Log($"Added symbol {symbol} to {buildTarget}");
                     }
                     catch
@@ -103,7 +100,7 @@ namespace NoSlimes.Util.UniTerminal.Editor
                             PlayerSettings.SetScriptingDefineSymbols(namedTarget, string.Join(";", parts));
                         }
 
-                        if (EditorPrefs.GetBool(DetailedLoggingKey, false))
+                        if (UniTerminalSettings.instance.IsDetailedLoggingEnabled)
                             Debug.Log($"Removed symbol {symbol} from {buildTarget}");
                     }
                     catch
