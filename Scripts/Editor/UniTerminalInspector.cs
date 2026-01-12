@@ -17,6 +17,7 @@ namespace NoSlimes.Util.UniTerminal.Editor
         // UI References
         private SerializedProperty consolePanelProp;
         private SerializedProperty inputFieldProp;
+        private SerializedProperty hintTextProp;
         private SerializedProperty scrollRectProp;
         private SerializedProperty consoleLogProp;
         private SerializedProperty maxLogLinesProp;
@@ -57,6 +58,7 @@ namespace NoSlimes.Util.UniTerminal.Editor
             // UI
             consolePanelProp = serializedObject.FindProperty("consolePanel");
             inputFieldProp = serializedObject.FindProperty("inputField");
+            hintTextProp = serializedObject.FindProperty("hintText");
             scrollRectProp = serializedObject.FindProperty("scrollRect");
             consoleLogProp = serializedObject.FindProperty("consoleLog");
             maxLogLinesProp = serializedObject.FindProperty("maxLogLines");
@@ -116,6 +118,7 @@ namespace NoSlimes.Util.UniTerminal.Editor
             {
                 EditorGUILayout.PropertyField(consolePanelProp);
                 EditorGUILayout.PropertyField(inputFieldProp);
+                EditorGUILayout.PropertyField(hintTextProp);
                 EditorGUILayout.PropertyField(scrollRectProp);
                 EditorGUILayout.PropertyField(consoleLogProp);
             });

@@ -1,3 +1,4 @@
+using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -508,16 +509,20 @@ namespace NoSlimes.Util.UniTerminal
                             return (IEnumerable<string>)providerMethod.Invoke(null, new object[] { prefix });
                         case 1 when providerParams[0].ParameterType == typeof(int):
                         {
-                            var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, new object[] { relativeArgIndex });
-                            return (suggestions ?? Array.Empty<string>())
-                                .Where(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-                        }
+                                var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, new object[] { relativeArgIndex });
+                                return (suggestions ?? Array.Empty<string>())
+                                    .Where(s => s.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0) // Hitta "bear" i "large beartrap"
+                                    .OrderByDescending(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) // Prioritera de som börjar på "bear"
+                                    .ThenBy(s => s);
+                            }
                         case 0:
                         {
-                            var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, null);
-                            return (suggestions ?? Array.Empty<string>())
-                                .Where(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-                        }
+                                var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, null);
+                                return (suggestions ?? Array.Empty<string>())
+                                    .Where(s => s.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
+                                    .OrderByDescending(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                                    .ThenBy(s => s);
+                            }
                         default:
 #if DEBUG
                             LogHandler(Colorize($"AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).", Settings.WarningColor), false);
@@ -531,16 +536,26 @@ namespace NoSlimes.Util.UniTerminal
 
             if (paramType == typeof(bool))
                 return new[] { "true", "false" }
-                .Where(v => v.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)); // Reverse to suggest 'true' first
+                    .Where(v => v.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
+                    .OrderByDescending(v => v.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)); // Reverse to suggest 'true' first
 
             if (paramType.IsEnum)
             {
                 return Enum.GetNames(paramType)
-                    .Where(name => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    .OrderBy(name => name);
+                      .Where(name => name.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
+                      .OrderByDescending(name => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                      .ThenBy(name => name);
             }
 
             return Array.Empty<string>();
         }
+
+        [ConsoleCommand("test_the_new_autocomplete", "A test command for the new autocomplete system.", AutoCompleteProvider = nameof(TestAC))]
+        private static void TestAutoCompleteCommand(CommandResponseDelegate response, string someName)
+        {
+            response($"You selected: {someName}", true);
+        }
+
+        private static IEnumerable<string> TestAC() => new[] { "beartrap", "large beartrap", "small beartrap", "bear" };
     }
 }

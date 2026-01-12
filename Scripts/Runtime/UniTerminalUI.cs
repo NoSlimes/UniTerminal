@@ -32,6 +32,7 @@ namespace NoSlimes.Util.UniTerminal
         [SerializeField] private KeyCode autoCompleteKey = KeyCode.Tab;
         [SerializeField] private GameObject consolePanel;
         [SerializeField] private TMP_InputField inputField;
+        [SerializeField] private TMP_Text hintText;
         [SerializeField] private ScrollRect scrollRect;
         [SerializeField] private TMP_Text consoleLog;
         [SerializeField] private int maxLogLines = 100;
@@ -65,9 +66,14 @@ namespace NoSlimes.Util.UniTerminal
         private string cachedBaseCommand = "";
         private bool ignoreNextValueChange = false;
 
+        // 
+        private string hoveredParamName = "";
+        private int hoveredParamIndex = -1;
+        private int lastCaretPosition = -1;
+
         private readonly System.Collections.Concurrent.ConcurrentQueue<(string logString, string stackTrace, LogType type)> logQueue = new();
 
-        private static readonly Regex TokenizerRegex = new Regex(@"[\""].+?[\""]|[^ ]+", RegexOptions.Compiled);
+        private static readonly Regex TokenizerRegex = new(@"[\""].+?[\""]|[^ ]+", RegexOptions.Compiled);
 
         internal static bool IsConsoleVisible => _instance != null && _instance.consolePanel.activeSelf;
 
@@ -117,7 +123,7 @@ namespace NoSlimes.Util.UniTerminal
                 consolePanelImage.color = backgroundColor;
             }
 
-            foreach (var img in consolePanel.GetComponentsInChildren<Image>())
+            foreach (Image img in consolePanel.GetComponentsInChildren<Image>())
             {
                 if (img.gameObject != consolePanel && img.gameObject != inputField.gameObject)
                 {
@@ -180,11 +186,14 @@ namespace NoSlimes.Util.UniTerminal
 
             inputField.onValueChanged.AddListener((val) =>
             {
+                UpdateHoverContext(val);
+
                 if (ignoreNextValueChange)
                 {
                     ignoreNextValueChange = false;
                     return;
                 }
+
                 autoCompleteIndex = -1;
             });
 
@@ -244,9 +253,15 @@ namespace NoSlimes.Util.UniTerminal
 
         private void Update()
         {
-            while (logQueue.TryDequeue(out var logEntry))
+            while (logQueue.TryDequeue(out (string logString, string stackTrace, LogType type) logEntry))
             {
                 ProcessLogMessage(logEntry.logString, logEntry.stackTrace, logEntry.type);
+            }
+
+            if (inputField.isFocused && inputField.caretPosition != lastCaretPosition)
+            {
+                lastCaretPosition = inputField.caretPosition;
+                UpdateHoverContext(inputField.text);
             }
 
             if (inputSystem == InputSystemType.Old)
@@ -387,101 +402,119 @@ namespace NoSlimes.Util.UniTerminal
             inputField.MoveTextEnd(false);
         }
 
+        private CommandContext ParseCommandContext(string input, int caretPos)
+        {
+            input ??= "";
+            int lastSep = input.LastIndexOf(commandSeparator, Math.Max(0, Math.Min(caretPos - 1, input.Length - 1)));
+            string globalPrefix = lastSep != -1 ? input.Substring(0, lastSep + 1) : "";
+            string activeSegment = lastSep != -1 ? input.Substring(lastSep + 1) : input;
+
+            int trimStart = 0;
+            while (trimStart < activeSegment.Length && char.IsWhiteSpace(activeSegment[trimStart])) trimStart++;
+            string whitespace = activeSegment.Substring(0, trimStart);
+            string trimmed = activeSegment.TrimStart();
+
+            MatchCollection matches = TokenizerRegex.Matches(trimmed);
+            List<string> partsList = matches.Cast<Match>().Select(m => m.Value).ToList();
+            if (trimmed.EndsWith(" ")) partsList.Add("");
+            if (partsList.Count == 0) partsList.Add("");
+
+            int partIndex = partsList.Count - 1;
+
+            return new CommandContext
+            {
+                GlobalPrefix = globalPrefix,
+                ActiveSegment = trimmed,
+                Whitespace = whitespace,
+                Parts = partsList.ToArray(),
+                CurrentPartIndex = partIndex,
+                CurrentPrefix = partsList[partIndex].Replace("\"", ""),
+                IsHelp = partsList.Count > 1 && partsList[0].Equals("help", StringComparison.OrdinalIgnoreCase)
+            };
+        }
+
+        private void UpdateHoverContext(string input)
+        {
+            var ctx = ParseCommandContext(input, inputField.caretPosition);
+            hoveredParamIndex = ctx.CurrentPartIndex - 1;
+
+            if (ctx.CurrentPartIndex > 0 && !ctx.IsHelp)
+            {
+                string cmdName = ctx.Parts[0].ToLower();
+                if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out var methods))
+                {
+                    // Collect unique parameter names for the current index
+                    var names = methods
+                        .Select(m => m.GetParameters())
+                        .Where(p => p.Length > hoveredParamIndex + 1)
+                        .Select(p => p[hoveredParamIndex + 1].Name)
+                        .Distinct();
+
+                    hoveredParamName = string.Join(" | ", names);
+                }
+                else hoveredParamName = "";
+            }
+            else hoveredParamName = "";
+
+            UpdateHintUI(input);
+        }
+
+        private void UpdateHintUI(string input)
+        {
+            if (hintText == null) return;
+
+            if (string.IsNullOrEmpty(hoveredParamName) || string.IsNullOrEmpty(input))
+            {
+                hintText.text = "";
+                return;
+            }
+
+            // We use a completely transparent version of the typed text to push 
+            // the hint to the correct horizontal position.
+            // The "  " adds that extra spacing you wanted.
+            string invisibleTyped = $"<color=#00000000>{input}</color>";
+            string paramHint = $"  <color=#ffffff66>({hoveredParamName})</color>";
+
+            hintText.text = invisibleTyped + paramHint;
+        }
+
         private void AutoComplete()
         {
-            string fullInput = inputField.text;
+            var ctx = ParseCommandContext(inputField.text, inputField.caretPosition);
 
-            // Allow empty string to proceed (to show all commands)
-            if (fullInput == null) fullInput = "";
+            string cleanLastPrefix = lastTypedPrefix.Replace("\"", "");
 
-            string globalPrefix = "";
-            string activeCommand = fullInput;
-            int lastSeparatorIndex = fullInput.LastIndexOf(commandSeparator);
-
-            if (lastSeparatorIndex != -1)
+            if (autoCompleteIndex == -1 || (ctx.CurrentPrefix != cleanLastPrefix))
             {
-                globalPrefix = fullInput.Substring(0, lastSeparatorIndex + 1);
-                activeCommand = fullInput.Substring(lastSeparatorIndex + 1);
-            }
+                autoCompleteIndex = -1;
+                currentMatches.Clear();
 
-            string whitespaceBeforeCmd = "";
-            if (activeCommand.Length > 0 && char.IsWhiteSpace(activeCommand[0]))
-            {
-                int trimStart = 0;
-                while (trimStart < activeCommand.Length && char.IsWhiteSpace(activeCommand[trimStart]))
-                    trimStart++;
-
-                whitespaceBeforeCmd = activeCommand.Substring(0, trimStart);
-                activeCommand = activeCommand.TrimStart();
-            }
-
-            // --- Regex Tokenizing that handles Empty String ---
-            string[] parts;
-            if (string.IsNullOrEmpty(activeCommand))
-            {
-                parts = new string[] { "" }; // Simulate one empty argument
-            }
-            else
-            {
-                var tokenMatches = TokenizerRegex.Matches(activeCommand);
-                var partsList = tokenMatches.Cast<Match>().Select(m => m.Value).ToList();
-                if (activeCommand.EndsWith(" ")) partsList.Add("");
-                parts = partsList.ToArray();
-            }
-
-            int currentPartIndex = parts.Length - 1;
-            string typedPrefix = parts[currentPartIndex];
-            string cleanPrefix = typedPrefix.Replace("\"", "");
-
-            bool isHelpArg = (parts.Length > 1 && parts[0].Equals("help", StringComparison.OrdinalIgnoreCase));
-
-            if (autoCompleteIndex == -1 || (typedPrefix != lastTypedPrefix))
-            {
-                bool isContinuingCycle = (currentMatches.Count > 0 && autoCompleteIndex != -1 && typedPrefix == currentMatches[autoCompleteIndex]);
-
-                if (!isContinuingCycle)
+                if (ctx.CurrentPartIndex == 0 || ctx.IsHelp)
                 {
-                    autoCompleteIndex = -1;
-                    currentMatches.Clear();
-
-                    if (currentPartIndex == 0 || isHelpArg)
+                    currentMatches = ConsoleCommandRegistry.Commands.Keys
+                        .Where(k => k.IndexOf(ctx.CurrentPrefix, StringComparison.OrdinalIgnoreCase) >= 0)
+                        .OrderByDescending(k => k.StartsWith(ctx.CurrentPrefix, StringComparison.OrdinalIgnoreCase))
+                        .ThenBy(k => k).ToList();
+                }
+                else
+                {
+                    if (ConsoleCommandRegistry.Commands.TryGetValue(ctx.Parts[0].ToLower(), out var methods))
                     {
-                        currentMatches = ConsoleCommandRegistry.Commands.Keys
-                            .Where(k => k.StartsWith(cleanPrefix, StringComparison.OrdinalIgnoreCase))
-                            .OrderBy(k => k)
-                            .ToList();
-                    }
-                    else
-                    {
-                        string commandName = parts[0].ToLower();
-                        if (ConsoleCommandRegistry.Commands.TryGetValue(commandName, out List<MethodInfo> methods))
+                        HashSet<string> suggestions = new();
+                        foreach (var m in methods)
                         {
-                            int methodArgIndex = currentPartIndex - 1;
-                            HashSet<string> distinctSuggestions = new HashSet<string>();
-
-                            foreach (var method in methods)
-                            {
-                                var suggestions = ConsoleCommandInvoker.GetAutoCompleteSuggestions(method, methodArgIndex, cleanPrefix);
-                                foreach (var s in suggestions) distinctSuggestions.Add(s);
-                            }
-                            currentMatches = distinctSuggestions
-                                .OrderByDescending(s => s.Equals("true", StringComparison.OrdinalIgnoreCase)) // sneaky logic to put "true" before "false" >:)
-                                .ThenBy(s => s)
-                                .ToList();
+                            foreach (var s in ConsoleCommandInvoker.GetAutoCompleteSuggestions(m, hoveredParamIndex, ctx.CurrentPrefix))
+                                suggestions.Add(s);
                         }
-                    }
 
-                    // Build base string
-                    if (parts.Length > 1)
-                    {
-                        string preSegments = string.Join(" ", parts, 0, parts.Length - 1);
-                        cachedBaseCommand = globalPrefix + whitespaceBeforeCmd + preSegments + " ";
-                    }
-                    else
-                    {
-                        cachedBaseCommand = globalPrefix + whitespaceBeforeCmd;
+                        currentMatches = suggestions
+                            .OrderByDescending(s => s.StartsWith(ctx.CurrentPrefix, StringComparison.OrdinalIgnoreCase))
+                            .ThenBy(s => s).ToList();
                     }
                 }
+
+                string preSegments = ctx.Parts.Length > 1 ? string.Join(" ", ctx.Parts, 0, ctx.Parts.Length - 1) + " " : "";
+                cachedBaseCommand = ctx.GlobalPrefix + ctx.Whitespace + preSegments;
             }
 
             if (currentMatches.Count == 0) return;
@@ -489,18 +522,16 @@ namespace NoSlimes.Util.UniTerminal
             autoCompleteIndex = (autoCompleteIndex + 1) % currentMatches.Count;
             string selectedMatch = currentMatches[autoCompleteIndex];
 
-            // Quote handling
+            lastTypedPrefix = selectedMatch;
+
             if (selectedMatch.Contains(" ") && !selectedMatch.StartsWith("\""))
-            {
                 selectedMatch = $"\"{selectedMatch}\"";
-            }
 
             ignoreNextValueChange = true;
             inputField.text = cachedBaseCommand + selectedMatch;
-
             inputField.caretPosition = inputField.text.Length;
 
-            lastTypedPrefix = selectedMatch;
+            UpdateHoverContext(inputField.text);
         }
 
 #if ENABLE_INPUT_SYSTEM
@@ -540,5 +571,16 @@ namespace NoSlimes.Util.UniTerminal
             ApplyStyles();
         }
 #endif
+
+        private struct CommandContext
+        {
+            public string GlobalPrefix;
+            public string ActiveSegment;
+            public string Whitespace;
+            public string[] Parts;
+            public int CurrentPartIndex;
+            public string CurrentPrefix;
+            public bool IsHelp;
+        }
     }
 }

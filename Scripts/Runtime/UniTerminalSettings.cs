@@ -3,6 +3,7 @@ using UnityEditor;
 
 namespace NoSlimes.Util.UniTerminal
 {
+    [FilePath("ProjectSettings/UniTerminalSettings.asset", FilePathAttribute.Location.ProjectFolder)]
     internal class UniTerminalSettings : ScriptableSingleton<UniTerminalSettings>
     {
         public bool IsAutoRebuildEnabled { get; internal set; } = true;
