@@ -549,13 +549,5 @@ namespace NoSlimes.Util.UniTerminal
 
             return Array.Empty<string>();
         }
-
-        [ConsoleCommand("test_the_new_autocomplete", "A test command for the new autocomplete system.", AutoCompleteProvider = nameof(TestAC))]
-        private static void TestAutoCompleteCommand(CommandResponseDelegate response, string someName)
-        {
-            response($"You selected: {someName}", true);
-        }
-
-        private static IEnumerable<string> TestAC() => new[] { "beartrap", "large beartrap", "small beartrap", "bear" };
     }
 }
