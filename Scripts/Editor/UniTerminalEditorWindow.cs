@@ -178,7 +178,6 @@ namespace NoSlimes.Util.UniTerminal.Editor
         private void SaveSettings()
         {
             if (settings == null) return;
-            EditorUtility.SetDirty(settings);
             settings.Save();
         }
 
