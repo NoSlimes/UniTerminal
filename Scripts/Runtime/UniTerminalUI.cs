@@ -436,7 +436,8 @@ namespace NoSlimes.Util.UniTerminal
         private void UpdateHoverContext(string input)
         {
             var ctx = ParseCommandContext(input, inputField.caretPosition);
-            int userArgIndex = ctx.CurrentPartIndex - 1;
+
+            hoveredParamIndex = ctx.CurrentPartIndex - 1;
 
             if (ctx.CurrentPartIndex > 0 && !ctx.IsHelp)
             {
@@ -447,14 +448,14 @@ namespace NoSlimes.Util.UniTerminal
                         .Select(e =>
                         {
                             var parameters = e.MethodInfo.GetParameters();
-                            
-                            bool hasDelegate = 
-                            parameters.Length > 0 &&
-                            parameters[0].ParameterType == typeof(CommandResponseDelegate) ||
-                            parameters[0].ParameterType == typeof(Action<string>) ||
-                            parameters[0].ParameterType == typeof(Action<bool, string>);
 
-                            int targetIndex = hasDelegate ? userArgIndex + 1 : userArgIndex;
+                            bool hasDelegate = parameters.Length > 0 && (
+                                parameters[0].ParameterType == typeof(Action<string>) ||
+                                parameters[0].ParameterType == typeof(Action<string, bool>) || 
+                                parameters[0].ParameterType == typeof(CommandResponseDelegate)
+                            );
+
+                            int targetIndex = hasDelegate ? hoveredParamIndex + 1 : hoveredParamIndex;
 
                             return (targetIndex >= 0 && targetIndex < parameters.Length)
                                    ? parameters[targetIndex].Name
@@ -495,6 +496,9 @@ namespace NoSlimes.Util.UniTerminal
         {
             var ctx = ParseCommandContext(inputField.text, inputField.caretPosition);
 
+            // Ensure we are working with the absolute latest context before suggesting
+            UpdateHoverContext(inputField.text);
+
             string cleanLastPrefix = lastTypedPrefix.Replace("\"", "");
 
             if (autoCompleteIndex == -1 || (ctx.CurrentPrefix != cleanLastPrefix))
@@ -516,8 +520,8 @@ namespace NoSlimes.Util.UniTerminal
                         HashSet<string> suggestions = new();
                         foreach (var entry in entries)
                         {
-                            foreach (var s in ConsoleCommandInvoker.GetAutoCompleteSuggestions(entry.MethodInfo, hoveredParamIndex, ctx.CurrentPrefix))
-                                suggestions.Add(s);
+                            var results = ConsoleCommandInvoker.GetAutoCompleteSuggestions(entry.MethodInfo, hoveredParamIndex, ctx.CurrentPrefix);
+                            foreach (var s in results) suggestions.Add(s);
                         }
 
                         currentMatches = suggestions
