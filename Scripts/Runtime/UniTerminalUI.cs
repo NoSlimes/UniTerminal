@@ -455,7 +455,6 @@ namespace NoSlimes.Util.UniTerminal
         {
             var ctx = ParseCommandContext(input, inputField.caretPosition);
 
-            // Crucial: Update the global field so AutoComplete knows where we are
             hoveredParamIndex = ctx.CurrentPartIndex - 1;
 
             if (ctx.CurrentPartIndex > 0 && !ctx.IsHelp)
@@ -468,7 +467,6 @@ namespace NoSlimes.Util.UniTerminal
                         {
                             var parameters = e.MethodInfo.GetParameters();
 
-                            // Same delegate logic as Invoker
                             bool hasDelegate = parameters.Length > 0 && (
                                 parameters[0].ParameterType == typeof(Action<string>) ||
                                 parameters[0].ParameterType == typeof(Action<string, bool>) ||
@@ -503,9 +501,6 @@ namespace NoSlimes.Util.UniTerminal
                 return;
             }
 
-            // We use a completely transparent version of the typed text to push 
-            // the hint to the correct horizontal position.
-            // The "  " adds that extra spacing you wanted.
             string invisibleTyped = $"<color=#00000000>{input}</color>";
             string paramHint = $"  <color=#ffffff66>({hoveredParamName})</color>";
 
@@ -515,7 +510,7 @@ namespace NoSlimes.Util.UniTerminal
         private void AutoComplete()
         {
             var ctx = ParseCommandContext(inputField.text, inputField.caretPosition);
-            UpdateHoverContext(inputField.text); // Sync global hoveredParamIndex
+            UpdateHoverContext(inputField.text); 
 
             string cleanLastPrefix = lastTypedPrefix.Replace("\"", "");
 
@@ -547,19 +542,13 @@ namespace NoSlimes.Util.UniTerminal
                     }
                 }
 
-                // --- THE FIX: Reconstruct Head and Tail ---
-                // Head: everything before the current word
                 string head = ctx.GlobalPrefix + ctx.Whitespace;
                 for (int i = 0; i < ctx.CurrentPartIndex; i++) head += ctx.Parts[i] + " ";
 
-                // Tail: everything after the current word
                 string tail = "";
                 for (int i = ctx.CurrentPartIndex + 1; i < ctx.Parts.Length; i++) tail += " " + ctx.Parts[i];
 
-                // Store these for the cycle
                 cachedBaseCommand = head;
-                // We'll reuse 'lastTypedPrefix' as a temp storage for the tail in this refactor
-                // Or better yet, just append the tail at the end
             }
 
             if (currentMatches.Count == 0) return;
@@ -571,14 +560,12 @@ namespace NoSlimes.Util.UniTerminal
             if (selectedMatch.Contains(" ") && !selectedMatch.StartsWith("\""))
                 selectedMatch = $"\"{selectedMatch}\"";
 
-            // Reconstruct full string: [Head] [SelectedWord] [Tail]
             string tailText = "";
             for (int i = ctx.CurrentPartIndex + 1; i < ctx.Parts.Length; i++) tailText += " " + ctx.Parts[i];
 
             ignoreNextValueChange = true;
             inputField.text = cachedBaseCommand + selectedMatch + tailText;
 
-            // Position caret at the end of the completed word
             inputField.caretPosition = cachedBaseCommand.Length + selectedMatch.Length;
 
             UpdateHoverContext(inputField.text);
