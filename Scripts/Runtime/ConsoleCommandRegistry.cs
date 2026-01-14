@@ -4,6 +4,8 @@ using System.Linq;
 using System.Reflection;
 using UnityEngine;
 using static NoSlimes.Util.UniTerminal.ConsoleCommandCache;
+using System.Threading.Tasks;
+using System.Linq.Expressions;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -16,11 +18,10 @@ namespace NoSlimes.Util.UniTerminal
 #endif
     internal static class ConsoleCommandRegistry
     {
-        private static ConsoleCommandCache _cache;
+        private static ConsoleCommandCache cache;
         private static readonly HashSet<Assembly> runtimeAssemblies = new();
-        private static readonly Dictionary<string, List<MethodInfo>> _commands = new();
-
-        internal static IReadOnlyDictionary<string, List<MethodInfo>> Commands => _commands;
+        private static readonly Dictionary<string, List<CommandEntry>> _commands = new();
+        internal static IReadOnlyDictionary<string, List<CommandEntry>> Commands => _commands;
         internal static event Action<double> OnCacheLoaded;
 
 #if UNITY_EDITOR
@@ -42,87 +43,155 @@ namespace NoSlimes.Util.UniTerminal
         }
 
         [MenuItem("Tools/UniTerminal/Manual Build Command Cache")]
-        internal static void DiscoverCommandsEditor()
+        internal static async void DiscoverCommandsEditor()
         {
-            DiscoverCommands(AppDomain.CurrentDomain.GetAssemblies());
+            int taskId = Progress.Start("UniTerminal", "Building Command Cache...");
+
+            try
+            {
+                await DiscoverCommandsAsync(
+                    AppDomain.CurrentDomain.GetAssemblies(),
+                    true,
+                    (progress, message) => Progress.Report(taskId, progress, message)
+                );
+            }
+            finally
+            {
+                Progress.Finish(taskId);
+            }
         }
 #endif
 
-        /// <summary>
-        /// Discovers console commands in the specified assemblies.
-        /// Can be called at runtime or in the editor.
-        /// </summary>
-        /// <param name="assemblies">Assemblies to search. If null, searches all loaded assemblies.</param>
         internal static void DiscoverCommands(IEnumerable<Assembly> assemblies = null, bool overwrite = true)
         {
             if (overwrite)
                 _commands.Clear();
 
             assemblies ??= AppDomain.CurrentDomain.GetAssemblies();
+            var validCommands = new List<CommandEntry>();
 
-            List<(MethodInfo Method, ConsoleCommandAttribute Attr)> validCommands = new();
-
-            foreach (Assembly assembly in assemblies)
+            foreach (var assembly in assemblies)
             {
                 Type[] types;
                 try { types = assembly.GetTypes(); }
                 catch (ReflectionTypeLoadException e) { types = e.Types.Where(t => t != null).ToArray(); }
 
-                foreach (Type t in types)
+                foreach (var type in types)
                 {
-                    foreach (MethodInfo m in t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
+                    foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
                     {
-                        try
-                        {
-                            ConsoleCommandAttribute attr = m.GetCustomAttribute<ConsoleCommandAttribute>();
+                        var attr = method.GetCustomAttribute<ConsoleCommandAttribute>();
+                        if (attr == null) continue;
+                        if (!method.IsStatic && !type.IsSubclassOf(typeof(UnityEngine.Object))) continue;
 
-                            if (attr != null)
-                            {
-                                if (!m.IsStatic && !t.IsSubclassOf(typeof(UnityEngine.Object)))
-                                {
-                                    Debug.LogError($"[UniTerminal] Non-static command '{attr.Command}' in '{t.Name}.{m.Name}' is in a standard C# class. Must be static. Skipping.");
-                                    continue;
-                                }
+                        var entry = new CommandEntry
+                        {
+                            CommandName = attr.Command,
+                            Description = attr.Description,
+                            Flags = attr.Flags,
+                            DeclaringTypeName = type.AssemblyQualifiedName,
+                            MethodName = method.Name,
+                            ParameterTypes = method.GetParameters().Select(p => p.ParameterType.AssemblyQualifiedName).ToArray(),
+                            MethodInfo = method,
+                            IsStatic = method.IsStatic,
+                            DeclaringType = type
+                        };
 
-                                validCommands.Add((m, attr));
-                            }
-                        }
-                        catch (MissingMethodException ex)
+                        validCommands.Add(entry);
+
+                        string key = entry.CommandName.ToLower();
+                        if (!_commands.TryGetValue(key, out var list))
                         {
-                            Debug.LogWarning($"[UniTerminal] Skipped command in '{t.Name}.{m.Name}'. Missing Method (likely attribute version mismatch): {ex.Message}");
+                            list = new List<CommandEntry>();
+                            _commands[key] = list;
                         }
-                        catch (TypeLoadException ex)
-                        {
-                            Debug.LogWarning($"[UniTerminal] Skipped command in '{t.Name}.{m.Name}'. Type Load Error: {ex.Message}");
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.LogError($"[UniTerminal] Error processing method '{m.Name}' in type '{t.Name}': {ex}");
-                        }
+                        list.Add(entry);
                     }
                 }
             }
 
-            foreach ((MethodInfo method, ConsoleCommandAttribute attribute) in validCommands)
+#if UNITY_EDITOR
+            UpdateCacheEditor(validCommands);
+#endif
+        }
+
+        internal static async Task DiscoverCommandsAsync(IEnumerable<Assembly> assemblies = null, bool overwrite = true, Action<float, string> onProgress = null)
+        {
+            var assemblyList = (assemblies ?? AppDomain.CurrentDomain.GetAssemblies()).ToArray();
+            int total = assemblyList.Length;
+
+            var results = await Task.Run(() =>
             {
-                string commandName = attribute.Command.ToLower();
+                var valid = new List<CommandEntry>();
 
-                if (!_commands.ContainsKey(commandName))
-                    _commands[commandName] = new List<MethodInfo>();
+                for (int i = 0; i < total; i++)
+                {
+                    var assembly = assemblyList[i];
 
-                _commands[commandName].Add(method);
+                    float progress = (float)i / total;
+                    onProgress?.Invoke(progress, $"Scanning {assembly.GetName().Name}...");
+
+                    Type[] types;
+                    try { types = assembly.GetTypes(); }
+                    catch (ReflectionTypeLoadException e) { types = e.Types.Where(t => t != null).ToArray(); }
+
+                    foreach (var type in types)
+                    {
+                        foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
+                        {
+                            var attr = method.GetCustomAttribute<ConsoleCommandAttribute>();
+                            if (attr == null) continue;
+                            if (!method.IsStatic && !type.IsSubclassOf(typeof(UnityEngine.Object))) continue;
+
+                            var entry = new CommandEntry
+                            {
+                                CommandName = attr.Command,
+                                Description = attr.Description,
+                                Flags = attr.Flags,
+                                DeclaringTypeName = type.AssemblyQualifiedName,
+                                MethodName = method.Name,
+                                ParameterTypes = method.GetParameters().Select(p => p.ParameterType.AssemblyQualifiedName).ToArray(),
+                                MethodInfo = method,
+                                IsStatic = method.IsStatic,
+                                DeclaringType = type
+                            };
+
+                            onProgress?.Invoke(progress, $"Found command: {entry.CommandName}");
+                            valid.Add(entry);
+                        }
+                    }
+                }
+
+                return valid;
+            });
+
+            if (overwrite)
+                _commands.Clear();
+
+            onProgress?.Invoke(0.95f, "Updating Command Dictionary...");
+
+            foreach (var entry in results)
+            {
+                string key = entry.CommandName.ToLower();
+                if (!_commands.TryGetValue(key, out var list))
+                {
+                    list = new List<CommandEntry>();
+                    _commands[key] = list;
+                }
+                list.Add(entry);
             }
 
 #if UNITY_EDITOR
-            UpdateCacheEditor(validCommands.Select(x => x.Method).ToList());
+            onProgress?.Invoke(0.99f, "Saving to Disk...");
+            UpdateCacheEditor(results);
 #endif
         }
 
 #if UNITY_EDITOR
-        private static void UpdateCacheEditor(List<MethodInfo> methods)
+        private static void UpdateCacheEditor(List<CommandEntry> entries)
         {
-            _cache = Resources.Load<ConsoleCommandCache>("UniTerminal/UniTerminalCommandCache");
-            if (_cache == null)
+            cache = Resources.Load<ConsoleCommandCache>("UniTerminal/UniTerminalCommandCache");
+            if (cache == null)
             {
                 string folderPath = "Assets/Resources/UniTerminal";
                 if (!AssetDatabase.IsValidFolder("Assets/Resources"))
@@ -130,128 +199,80 @@ namespace NoSlimes.Util.UniTerminal
                 if (!AssetDatabase.IsValidFolder(folderPath))
                     AssetDatabase.CreateFolder("Assets/Resources", "UniTerminal");
 
-                _cache = ScriptableObject.CreateInstance<ConsoleCommandCache>();
-                AssetDatabase.CreateAsset(_cache, folderPath + "/UniTerminalCommandCache.asset");
+                cache = ScriptableObject.CreateInstance<ConsoleCommandCache>();
+                AssetDatabase.CreateAsset(cache, folderPath + "/UniTerminalCommandCache.asset");
             }
 
-            List<CommandEntry> previousCommands = null;
-            bool detailedLogging = UniTerminalSettings.instance.IsDetailedLoggingEnabled && _cache.Commands != null;
-            if (detailedLogging)
-            {
-                previousCommands = new List<CommandEntry>(_cache.Commands);
-            }
+            cache.Commands = entries.ToArray();
 
-            _cache.Commands = methods.Select(static m =>
-            {
-                ConsoleCommandAttribute attr = m.GetCustomAttribute<ConsoleCommandAttribute>();
-                return new CommandEntry
-                {
-                    CommandName = attr?.Command ?? m.Name,
-                    Description = attr?.Description ?? "",
-                    Flags = attr?.Flags ?? CommandFlags.None,
-                    DeclaringType = m.DeclaringType?.AssemblyQualifiedName,
-                    MethodName = m.Name,
-                    ParameterTypes = m.GetParameters().Select(p => p.ParameterType.AssemblyQualifiedName).ToArray()
-                };
-            }).ToArray();
-
-            EditorUtility.SetDirty(_cache);
+            EditorUtility.SetDirty(cache);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            Debug.Log($"[UniTerminal] Built command cache with {_cache.Commands.Length} entries.");
-
-            if (detailedLogging)
-            {
-                LogCacheChanges(previousCommands, _cache.Commands);
-            }
-        }
-
-        private static void LogCacheChanges(List<CommandEntry> previousCommands, CommandEntry[] currentCommands)
-        {
-            if (previousCommands == null) return;
-
-            foreach (CommandEntry entry in currentCommands)
-            {
-                CommandEntry prevEntry = previousCommands.FirstOrDefault(e => e.CommandName == entry.CommandName);
-                if (prevEntry == null)
-                {
-                    Debug.Log($"[UniTerminal] New command added: {entry.CommandName}");
-                }
-                else
-                {
-                    if (prevEntry.DeclaringType != entry.DeclaringType || prevEntry.MethodName != entry.MethodName || prevEntry.Flags != entry.Flags)
-                    {
-                        Debug.Log($"[UniTerminal] Command modified: {entry.CommandName} (was {prevEntry.DeclaringType}.{prevEntry.MethodName}, now {entry.DeclaringType}.{entry.MethodName})");
-                    }
-                }
-            }
-            foreach (CommandEntry prevEntry in previousCommands)
-            {
-                if (!currentCommands.Any(e => e.CommandName == prevEntry.CommandName))
-                {
-                    Debug.Log($"[UniTerminal] Command removed: {prevEntry.CommandName}");
-                }
-            }
+            Debug.Log($"[UniTerminal] Built command cache with {cache.Commands.Length} entries.");
         }
 #endif
 
         internal static void DiscoverCommandsInAssembly(Assembly assembly)
         {
-            if (assembly == null)
-                throw new ArgumentNullException(nameof(assembly));
-
-            if (!runtimeAssemblies.Contains(assembly))
-            {
-                runtimeAssemblies.Add(assembly);
-            }
-
+            if (assembly == null) throw new ArgumentNullException(nameof(assembly));
+            if (!runtimeAssemblies.Contains(assembly)) runtimeAssemblies.Add(assembly);
             DiscoverCommands(new[] { assembly }, false);
         }
 
         public static void LoadCache()
         {
-            System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            _cache = Resources.Load<ConsoleCommandCache>("UniTerminal/UniTerminalCommandCache");
-            if (_cache == null)
+            cache = Resources.Load<ConsoleCommandCache>("UniTerminal/UniTerminalCommandCache");
+            if (cache == null)
                 throw new InvalidOperationException("UniTerminalCommandCache asset not found at 'Resources/UniTerminal/UniTerminalCommandCache'");
 
             _commands.Clear();
 
-            foreach (CommandEntry entry in _cache.Commands)
+            foreach (var entry in cache.Commands)
             {
-                Type type = Type.GetType(entry.DeclaringType);
+                var type = Type.GetType(entry.DeclaringTypeName);
                 if (type == null)
                 {
-                    Debug.LogWarning($"[UniTerminal] Type '{entry.DeclaringType}' not found.");
+                    Debug.LogWarning($"Type '{entry.DeclaringTypeName}' not found.");
                     continue;
                 }
 
-                MethodInfo[] methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)
-                                  .Where(m => m.Name == entry.MethodName)
-                                  .ToArray();
-
-                if (methods.Length == 0)
+                var paramTypes = entry.ParameterTypes.Select(Type.GetType).ToArray();
+                if (paramTypes.Any(t => t == null))
                 {
-                    Debug.LogWarning($"[UniTerminal] Method '{entry.MethodName}' not found on type '{type.FullName}'.");
+                    Debug.LogWarning($"Parameter type missing for '{entry.CommandName}'.");
                     continue;
                 }
+
+                var method = type.GetMethod(entry.MethodName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance,
+                    null, paramTypes, null);
+
+                if (method == null)
+                {
+                    Debug.LogWarning($"Method not found: {type.FullName}.{entry.MethodName}");
+                    continue;
+                }
+
+                if (!FilterCommand(entry))
+                    continue;
+
+                entry.MethodInfo = method;
+                entry.IsStatic = method.IsStatic;
+                entry.DeclaringType = type;
+
+                if (method.IsStatic)
+                    entry.Delegate = Delegate.CreateDelegate(Expression.GetActionType(paramTypes), method);
 
                 string key = entry.CommandName.ToLower();
-                if (!_commands.ContainsKey(key))
-                    _commands[key] = new List<MethodInfo>();
-
-                foreach (MethodInfo method in methods)
+                if (!_commands.TryGetValue(key, out var list))
                 {
-                    if (!_commands[key].Contains(method))
-                    {
-                        if (!FilterCommand(method))
-                            continue;
-
-                        _commands[key].Add(method);
-                    }
+                    list = new List<CommandEntry>();
+                    _commands[key] = list;
                 }
+                list.Add(entry);
             }
 
             if (runtimeAssemblies.Count > 0)
@@ -264,17 +285,15 @@ namespace NoSlimes.Util.UniTerminal
             OnCacheLoaded?.Invoke(stopwatch.Elapsed.TotalMilliseconds);
         }
 
-        private static bool FilterCommand(MethodInfo method)
+        private static bool FilterCommand(CommandEntry entry)
         {
-            ConsoleCommandAttribute attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
-            if (attribute == null)
+            if (entry == null)
                 return false;
 
-            CommandFlags flags = attribute.Flags;
-
-            if (flags.HasFlag(CommandFlags.DebugOnly) && !Debug.isDebugBuild)
+            if (entry.Flags.HasFlag(CommandFlags.DebugOnly) && !Debug.isDebugBuild)
                 return false;
-            return !flags.HasFlag(CommandFlags.EditorOnly) || Application.isEditor;
+
+            return !entry.Flags.HasFlag(CommandFlags.EditorOnly) || Application.isEditor;
         }
     }
 }

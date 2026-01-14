@@ -436,18 +436,31 @@ namespace NoSlimes.Util.UniTerminal
         private void UpdateHoverContext(string input)
         {
             var ctx = ParseCommandContext(input, inputField.caretPosition);
-            hoveredParamIndex = ctx.CurrentPartIndex - 1;
+            int userArgIndex = ctx.CurrentPartIndex - 1;
 
             if (ctx.CurrentPartIndex > 0 && !ctx.IsHelp)
             {
                 string cmdName = ctx.Parts[0].ToLower();
-                if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out var methods))
+                if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out var commandEntries))
                 {
-                    // Collect unique parameter names for the current index
-                    var names = methods
-                        .Select(m => m.GetParameters())
-                        .Where(p => p.Length > hoveredParamIndex + 1)
-                        .Select(p => p[hoveredParamIndex + 1].Name)
+                    var names = commandEntries
+                        .Select(e =>
+                        {
+                            var parameters = e.MethodInfo.GetParameters();
+                            
+                            bool hasDelegate = 
+                            parameters.Length > 0 &&
+                            parameters[0].ParameterType == typeof(CommandResponseDelegate) ||
+                            parameters[0].ParameterType == typeof(Action<string>) ||
+                            parameters[0].ParameterType == typeof(Action<bool, string>);
+
+                            int targetIndex = hasDelegate ? userArgIndex + 1 : userArgIndex;
+
+                            return (targetIndex >= 0 && targetIndex < parameters.Length)
+                                   ? parameters[targetIndex].Name
+                                   : null;
+                        })
+                        .Where(name => name != null)
                         .Distinct();
 
                     hoveredParamName = string.Join(" | ", names);
@@ -498,12 +511,12 @@ namespace NoSlimes.Util.UniTerminal
                 }
                 else
                 {
-                    if (ConsoleCommandRegistry.Commands.TryGetValue(ctx.Parts[0].ToLower(), out var methods))
+                    if (ConsoleCommandRegistry.Commands.TryGetValue(ctx.Parts[0].ToLower(), out var entries))
                     {
                         HashSet<string> suggestions = new();
-                        foreach (var m in methods)
+                        foreach (var entry in entries)
                         {
-                            foreach (var s in ConsoleCommandInvoker.GetAutoCompleteSuggestions(m, hoveredParamIndex, ctx.CurrentPrefix))
+                            foreach (var s in ConsoleCommandInvoker.GetAutoCompleteSuggestions(entry.MethodInfo, hoveredParamIndex, ctx.CurrentPrefix))
                                 suggestions.Add(s);
                         }
 

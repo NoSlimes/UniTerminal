@@ -5,7 +5,9 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using UnityEditorInternal.Profiling.Memory.Experimental.FileFormat;
 using UnityEngine;
+using static NoSlimes.Util.UniTerminal.ConsoleCommandCache;
 using static NoSlimes.Util.UniTerminal.UniTerminal;
 
 namespace NoSlimes.Util.UniTerminal
@@ -197,7 +199,7 @@ namespace NoSlimes.Util.UniTerminal
             string command = parts[0].ToLower();
             string[] args = parts.Skip(1).ToArray();
 
-            if (!ConsoleCommandRegistry.Commands.TryGetValue(command, out List<MethodInfo> methodList))
+            if (!ConsoleCommandRegistry.Commands.TryGetValue(command, out List<CommandEntry> entryList))
             {
                 LogHandler(Colorize($"Unknown command: '{command}'. Type 'help' for a list of commands.", Settings.WarningColor), false);
                 return;
@@ -209,9 +211,9 @@ namespace NoSlimes.Util.UniTerminal
 
             List<string> candidateErrors = new();
 
-            foreach (MethodInfo method in methodList)
+            foreach (CommandEntry entry in entryList)
             {
-                ParameterInfo[] parameters = method.GetParameters();
+                ParameterInfo[] parameters = entry.MethodInfo.GetParameters();
                 int paramOffset = 0;
 
                 bool hasResponse = parameters.Length > 0 &&
@@ -223,7 +225,7 @@ namespace NoSlimes.Util.UniTerminal
 
                 if (args.Length > parameters.Length - paramOffset)
                 {
-                    candidateErrors.Add($"[{GetMethodSignature(method)}] Too many arguments provided.");
+                    candidateErrors.Add($"[{GetMethodSignature(entry.MethodInfo)}] Too many arguments provided.");
                     continue;
                 }
 
@@ -269,7 +271,7 @@ namespace NoSlimes.Util.UniTerminal
                             string paramName = parameters[i].Name;
                             string typeName = parameters[i].ParameterType.Name;
 
-                            candidateErrors.Add($"[{GetMethodSignature(method)}] Error parsing arg '{paramName}' ({typeName}): {msg}");
+                            candidateErrors.Add($"[{GetMethodSignature(entry.MethodInfo)}] Error parsing arg '{paramName}' ({typeName}): {msg}");
 
                             success = false;
                             break;
@@ -282,7 +284,7 @@ namespace NoSlimes.Util.UniTerminal
                     }
                     else
                     {
-                        candidateErrors.Add($"[{GetMethodSignature(method)}] Missing required argument '{parameters[i].Name}'.");
+                        candidateErrors.Add($"[{GetMethodSignature(entry.MethodInfo)}] Missing required argument '{parameters[i].Name}'.");
                         success = false;
                         break;
                     }
@@ -291,7 +293,7 @@ namespace NoSlimes.Util.UniTerminal
                 if (success && score > bestScore)
                 {
                     bestScore = score;
-                    matchedMethod = method;
+                    matchedMethod = entry.MethodInfo;
                     finalArgs = tempArgs;
                 }
             }
@@ -398,58 +400,57 @@ namespace NoSlimes.Util.UniTerminal
             if (string.IsNullOrEmpty(commandName))
             {
                 helpBuilder.AppendLine("Available Commands:");
-                foreach (KeyValuePair<string, List<MethodInfo>> kv in ConsoleCommandRegistry.Commands.OrderBy(c => c.Key))
+                foreach (KeyValuePair<string, List<CommandEntry>> kv in ConsoleCommandRegistry.Commands.OrderBy(c => c.Key))
                 {
-                    var methods = kv.Value.Distinct().ToList();
-                    helpBuilder.AppendLine($"- {kv.Key} ({methods.Count} overload{(methods.Count > 1 ? "s" : "")}):");
+                    var commandEntries = kv.Value.Distinct().ToList();
+                    helpBuilder.AppendLine($"- {kv.Key} ({commandEntries.Count} overload{(commandEntries.Count > 1 ? "s" : "")}):");
 
-                    foreach (MethodInfo method in methods)
+                    foreach (CommandEntry entry in commandEntries)
                     {
-                        ConsoleCommandAttribute attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
-
                         // Skip hidden commands in general help listing
-                        if (attribute.Flags.HasFlag(CommandFlags.Hidden))
+                        if (entry.Flags.HasFlag(CommandFlags.Hidden))
                             continue;
 
-                        ParameterInfo[] parameters = method.GetParameters();
+                        ParameterInfo[] parameters = entry.MethodInfo.GetParameters();
 
                         string argsInfo = string.Join(" ", parameters
                             .Where((p, index) => !(index == 0 &&
                                 (p.ParameterType == typeof(Action<string>) ||
-                                 p.ParameterType == typeof(Action<string, bool>))))
+                                 p.ParameterType == typeof(Action<string, bool>) ||
+                                 p.ParameterType == typeof(CommandResponseDelegate))))
                             .Select(p =>
                                 p.HasDefaultValue
                                     ? $"<{p.Name} ({p.ParameterType.Name})={(p.DefaultValue is string s && s == string.Empty ? "\"\"" : p.DefaultValue)}>"
                                     : $"<{p.Name} ({p.ParameterType.Name})>"));
 
-                        helpBuilder.AppendLine($"    {attribute.Command} {argsInfo} - {attribute.Description}");
+                        helpBuilder.AppendLine($"    {entry.CommandName} {argsInfo} - {entry.Description}");
                     }
                 }
             }
             else
             {
                 string cmdName = commandName.ToLower();
-                if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out List<MethodInfo> methodList))
+                if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out List<CommandEntry> entryList))
                 {
-                    var methods = methodList.Distinct().ToList();
+                    var commandEntires = entryList.Distinct().ToList();
 
-                    helpBuilder.AppendLine($"Command: {cmdName} ({methods.Count} overload{(methods.Count > 1 ? "s" : "")})");
+                    helpBuilder.AppendLine($"Command: {cmdName} ({commandEntires.Count} overload{(commandEntires.Count > 1 ? "s" : "")})");
 
-                    foreach (MethodInfo method in methods)
+                    foreach (CommandEntry entry in commandEntires)
                     {
-                        ConsoleCommandAttribute attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
-                        ParameterInfo[] parameters = method.GetParameters();
+                        ParameterInfo[] parameters = entry.MethodInfo.GetParameters();
 
                         string argsInfo = string.Join(" ", parameters
                             .Where((p, index) => !(index == 0 &&
                                 (p.ParameterType == typeof(Action<string>) ||
-                                 p.ParameterType == typeof(Action<string, bool>))))
+                                 p.ParameterType == typeof(Action<string, bool>) ||
+                                 p.ParameterType == typeof(CommandResponseDelegate))))
                             .Select(p =>
                                 p.HasDefaultValue
                                     ? $"<{p.Name} ({p.ParameterType.Name})={(p.DefaultValue is string s && s == string.Empty ? "\"\"" : p.DefaultValue)}>"
                                     : $"<{p.Name} ({p.ParameterType.Name})>"));
 
-                        helpBuilder.AppendLine($"  Description: {attribute.Description}");
+                        helpBuilder.AppendLine($"  Description: {entry.Description}");
                         if (parameters.Length > 0) helpBuilder.AppendLine($"  Arguments: {argsInfo}");
                         helpBuilder.AppendLine();
                     }
@@ -470,7 +471,8 @@ namespace NoSlimes.Util.UniTerminal
 
             bool hasCallback = parameters.Length > 0 &&
                 (parameters[0].ParameterType == typeof(Action<string>) ||
-                 parameters[0].ParameterType == typeof(Action<string, bool>));
+                 parameters[0].ParameterType == typeof(Action<string, bool>) ||
+                 parameters[0].ParameterType == typeof(CommandResponseDelegate));
 
             if (hasCallback) argIndex++;
             if (argIndex >= parameters.Length) return Array.Empty<string>();

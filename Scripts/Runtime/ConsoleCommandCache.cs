@@ -1,9 +1,10 @@
 using System;
+using System.Reflection;
 using UnityEngine;
 
 namespace NoSlimes.Util.UniTerminal
 {
-    internal class ConsoleCommandCache : ScriptableObject
+    public class ConsoleCommandCache : ScriptableObject
     {
         public CommandEntry[] Commands;
 
@@ -13,10 +14,17 @@ namespace NoSlimes.Util.UniTerminal
             public string CommandName;
             public string Description;
             public CommandFlags Flags;
-            public string DeclaringType;
+
+            // Binding info
+            public string DeclaringTypeName;
             public string MethodName;
             public string[] ParameterTypes;
-        }
 
+            // Runtime only
+            [NonSerialized] public MethodInfo MethodInfo; // For reflection invocation - this is slower than Delegate
+            [NonSerialized] public Delegate Delegate; // For faster invocation 
+            [NonSerialized] public bool IsStatic;
+            [NonSerialized] public Type DeclaringType;
+        }
     }
 }

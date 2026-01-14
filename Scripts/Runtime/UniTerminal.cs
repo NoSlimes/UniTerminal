@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
+using static NoSlimes.Util.UniTerminal.ConsoleCommandCache;
 
 namespace NoSlimes.Util.UniTerminal
 {
@@ -25,7 +26,7 @@ namespace NoSlimes.Util.UniTerminal
         /// Gets a read-only dictionary of all currently registered commands.
         /// Keys are command names (lowercase).
         /// </summary>
-        public static IReadOnlyDictionary<string, List<MethodInfo>> Commands => ConsoleCommandRegistry.Commands;
+        public static IReadOnlyDictionary<string, List<CommandEntry>> Commands => ConsoleCommandRegistry.Commands;
 
         /// <summary>
         /// Event invoked when the initial command cache has finished loading.
