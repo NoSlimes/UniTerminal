@@ -414,12 +414,30 @@ namespace NoSlimes.Util.UniTerminal
             string whitespace = activeSegment.Substring(0, trimStart);
             string trimmed = activeSegment.TrimStart();
 
+            int caretInTrimmed = caretPos - (globalPrefix.Length + whitespace.Length);
+
             MatchCollection matches = TokenizerRegex.Matches(trimmed);
             List<string> partsList = matches.Cast<Match>().Select(m => m.Value).ToList();
-            if (trimmed.EndsWith(" ")) partsList.Add("");
-            if (partsList.Count == 0) partsList.Add("");
 
-            int partIndex = partsList.Count - 1;
+            int partIndex = 0;
+            bool found = false;
+
+            for (int i = 0; i < matches.Count; i++)
+            {
+                var m = matches[i];
+                if (caretInTrimmed <= m.Index + m.Length)
+                {
+                    partIndex = i;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                partIndex = partsList.Count;
+                partsList.Add("");
+            }
 
             return new CommandContext
             {
@@ -437,6 +455,7 @@ namespace NoSlimes.Util.UniTerminal
         {
             var ctx = ParseCommandContext(input, inputField.caretPosition);
 
+            // Crucial: Update the global field so AutoComplete knows where we are
             hoveredParamIndex = ctx.CurrentPartIndex - 1;
 
             if (ctx.CurrentPartIndex > 0 && !ctx.IsHelp)
@@ -449,9 +468,10 @@ namespace NoSlimes.Util.UniTerminal
                         {
                             var parameters = e.MethodInfo.GetParameters();
 
+                            // Same delegate logic as Invoker
                             bool hasDelegate = parameters.Length > 0 && (
                                 parameters[0].ParameterType == typeof(Action<string>) ||
-                                parameters[0].ParameterType == typeof(Action<string, bool>) || 
+                                parameters[0].ParameterType == typeof(Action<string, bool>) ||
                                 parameters[0].ParameterType == typeof(CommandResponseDelegate)
                             );
 
@@ -495,9 +515,7 @@ namespace NoSlimes.Util.UniTerminal
         private void AutoComplete()
         {
             var ctx = ParseCommandContext(inputField.text, inputField.caretPosition);
-
-            // Ensure we are working with the absolute latest context before suggesting
-            UpdateHoverContext(inputField.text);
+            UpdateHoverContext(inputField.text); // Sync global hoveredParamIndex
 
             string cleanLastPrefix = lastTypedPrefix.Replace("\"", "");
 
@@ -523,30 +541,45 @@ namespace NoSlimes.Util.UniTerminal
                             var results = ConsoleCommandInvoker.GetAutoCompleteSuggestions(entry.MethodInfo, hoveredParamIndex, ctx.CurrentPrefix);
                             foreach (var s in results) suggestions.Add(s);
                         }
-
                         currentMatches = suggestions
                             .OrderByDescending(s => s.StartsWith(ctx.CurrentPrefix, StringComparison.OrdinalIgnoreCase))
                             .ThenBy(s => s).ToList();
                     }
                 }
 
-                string preSegments = ctx.Parts.Length > 1 ? string.Join(" ", ctx.Parts, 0, ctx.Parts.Length - 1) + " " : "";
-                cachedBaseCommand = ctx.GlobalPrefix + ctx.Whitespace + preSegments;
+                // --- THE FIX: Reconstruct Head and Tail ---
+                // Head: everything before the current word
+                string head = ctx.GlobalPrefix + ctx.Whitespace;
+                for (int i = 0; i < ctx.CurrentPartIndex; i++) head += ctx.Parts[i] + " ";
+
+                // Tail: everything after the current word
+                string tail = "";
+                for (int i = ctx.CurrentPartIndex + 1; i < ctx.Parts.Length; i++) tail += " " + ctx.Parts[i];
+
+                // Store these for the cycle
+                cachedBaseCommand = head;
+                // We'll reuse 'lastTypedPrefix' as a temp storage for the tail in this refactor
+                // Or better yet, just append the tail at the end
             }
 
             if (currentMatches.Count == 0) return;
 
             autoCompleteIndex = (autoCompleteIndex + 1) % currentMatches.Count;
             string selectedMatch = currentMatches[autoCompleteIndex];
-
             lastTypedPrefix = selectedMatch;
 
             if (selectedMatch.Contains(" ") && !selectedMatch.StartsWith("\""))
                 selectedMatch = $"\"{selectedMatch}\"";
 
+            // Reconstruct full string: [Head] [SelectedWord] [Tail]
+            string tailText = "";
+            for (int i = ctx.CurrentPartIndex + 1; i < ctx.Parts.Length; i++) tailText += " " + ctx.Parts[i];
+
             ignoreNextValueChange = true;
-            inputField.text = cachedBaseCommand + selectedMatch;
-            inputField.caretPosition = inputField.text.Length;
+            inputField.text = cachedBaseCommand + selectedMatch + tailText;
+
+            // Position caret at the end of the completed word
+            inputField.caretPosition = cachedBaseCommand.Length + selectedMatch.Length;
 
             UpdateHoverContext(inputField.text);
         }
