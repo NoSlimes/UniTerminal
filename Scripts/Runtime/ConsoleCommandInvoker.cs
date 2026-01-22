@@ -5,7 +5,6 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
-using UnityEditorInternal.Profiling.Memory.Experimental.FileFormat;
 using UnityEngine;
 using static NoSlimes.Util.UniTerminal.ConsoleCommandCache;
 using static NoSlimes.Util.UniTerminal.UniTerminal;
@@ -516,7 +515,7 @@ namespace NoSlimes.Util.UniTerminal
                                 var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, new object[] { relativeArgIndex });
                                 return (suggestions ?? Array.Empty<string>())
                                     .Where(s => s.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0) // Hitta "bear" i "large beartrap"
-                                    .OrderByDescending(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) // Prioritera de som börjar på "bear"
+                                    .OrderByDescending(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) // Prioritera de som bÃ¶rjar pÃ¥ "bear"
                                     .ThenBy(s => s);
                             }
                         case 0:
