@@ -2,7 +2,7 @@
     "name": "NoSlimes.UniTerminal.Editor",
     "rootNamespace": "",
     "references": [
-        "GUID:086a821c12250504db6a287843b3f73c"
+        "GUID:3857b2fc56092ac46a9d30f441772494"
     ],
     "includePlatforms": [
         "Editor"
