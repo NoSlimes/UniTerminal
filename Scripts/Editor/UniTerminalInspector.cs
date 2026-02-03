@@ -1,12 +1,14 @@
 using UnityEditor;
+using UnityEngine;
 
 namespace NoSlimes.Util.UniTerminal.Editor
 {
     [CustomEditor(typeof(UniTerminalUI))]
+    // Add CanEditMultipleObjects if you want to edit several at once
+    [CanEditMultipleObjects]
     internal class UniTerminalInspector : UnityEditor.Editor
     {
         #region Serialized Properties
-        // Inputs
         private SerializedProperty inputSystemProp;
         private SerializedProperty toggleConsoleActionProp;
         private SerializedProperty autoCompleteActionProp;
@@ -14,7 +16,6 @@ namespace NoSlimes.Util.UniTerminal.Editor
         private SerializedProperty autoCompleteKeyProp;
         private SerializedProperty commandSeparatorProp;
 
-        // UI References
         private SerializedProperty consolePanelProp;
         private SerializedProperty inputFieldProp;
         private SerializedProperty hintTextProp;
@@ -22,13 +23,11 @@ namespace NoSlimes.Util.UniTerminal.Editor
         private SerializedProperty consoleLogProp;
         private SerializedProperty maxLogLinesProp;
 
-        // Behavior
         private SerializedProperty dontDestroyOnLoadProp;
         private SerializedProperty catchUnityLogsProp;
         private SerializedProperty controlCursorLockModeProp;
         private SerializedProperty loadCacheOnAwakeProp;
 
-        // Customization
         private SerializedProperty bgColorProp;
         private SerializedProperty accentColorProp;
         private SerializedProperty textColorProp;
@@ -40,22 +39,17 @@ namespace NoSlimes.Util.UniTerminal.Editor
         private SerializedProperty logFontSizeProp;
         #endregion
 
-        // Editor State
         private bool showCustomization = false;
 
         private void OnEnable()
         {
-            // Input
-#if ENABLE_INPUT_SYSTEM
             inputSystemProp = serializedObject.FindProperty("inputSystem");
             toggleConsoleActionProp = serializedObject.FindProperty("toggleConsoleAction");
             autoCompleteActionProp = serializedObject.FindProperty("autoCompleteAction");
-#endif
             toggleConsoleKeyProp = serializedObject.FindProperty("toggleConsoleKey");
             autoCompleteKeyProp = serializedObject.FindProperty("autoCompleteKey");
             commandSeparatorProp = serializedObject.FindProperty("commandSeparator");
 
-            // UI
             consolePanelProp = serializedObject.FindProperty("consolePanel");
             inputFieldProp = serializedObject.FindProperty("inputField");
             hintTextProp = serializedObject.FindProperty("hintText");
@@ -63,13 +57,11 @@ namespace NoSlimes.Util.UniTerminal.Editor
             consoleLogProp = serializedObject.FindProperty("consoleLog");
             maxLogLinesProp = serializedObject.FindProperty("maxLogLines");
 
-            // Behavior
             dontDestroyOnLoadProp = serializedObject.FindProperty("dontDestroyOnLoad");
             catchUnityLogsProp = serializedObject.FindProperty("catchUnityLogs");
             controlCursorLockModeProp = serializedObject.FindProperty("controlCursorLockMode");
             loadCacheOnAwakeProp = serializedObject.FindProperty("loadCacheOnAwake");
 
-            // Customization
             bgColorProp = serializedObject.FindProperty("backgroundColor");
             accentColorProp = serializedObject.FindProperty("accentColor");
             textColorProp = serializedObject.FindProperty("textColor");
@@ -85,31 +77,32 @@ namespace NoSlimes.Util.UniTerminal.Editor
         {
             serializedObject.Update();
 
-            // --- Section: Input ---
+            EditorGUI.BeginChangeCheck();
             DrawSection("Input Settings", () =>
             {
 #if ENABLE_INPUT_SYSTEM
-                EditorGUILayout.PropertyField(inputSystemProp);
-
-                UniTerminalUI.InputSystemType selectedInputSystem = (UniTerminalUI.InputSystemType)inputSystemProp.enumValueIndex;
-
-                EditorGUILayout.Space(2);
-                if (selectedInputSystem == UniTerminalUI.InputSystemType.New)
+                if (inputSystemProp != null)
                 {
-                    EditorGUILayout.PropertyField(toggleConsoleActionProp);
-                    EditorGUILayout.PropertyField(autoCompleteActionProp);
-                }
-                else
-                {
-                    EditorGUILayout.PropertyField(toggleConsoleKeyProp);
-                    EditorGUILayout.PropertyField(autoCompleteKeyProp);
+                    EditorGUILayout.PropertyField(inputSystemProp);
+
+                    // Check enum value safely
+                    if (inputSystemProp.enumValueIndex == (int)UniTerminalUI.InputSystemType.New)
+                    {
+                        EditorGUILayout.PropertyField(toggleConsoleActionProp);
+                        EditorGUILayout.PropertyField(autoCompleteActionProp);
+                    }
+                    else
+                    {
+                        EditorGUILayout.PropertyField(toggleConsoleKeyProp);
+                        EditorGUILayout.PropertyField(autoCompleteKeyProp);
+                    }
                 }
 #else
                 EditorGUILayout.PropertyField(toggleConsoleKeyProp);
                 EditorGUILayout.PropertyField(autoCompleteKeyProp);
                 EditorGUILayout.HelpBox("New Input System package not enabled in Project Settings.", MessageType.Warning);
 #endif
-                EditorGUILayout.Space(5);
+                EditorGUILayout.Space(2);
                 EditorGUILayout.PropertyField(commandSeparatorProp);
             });
 
@@ -133,17 +126,12 @@ namespace NoSlimes.Util.UniTerminal.Editor
                 EditorGUILayout.PropertyField(loadCacheOnAwakeProp);
             });
 
-            // --- Section: Visuals (Foldout) ---
+            // --- Section: Visuals ---
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUI.indentLevel++;
             showCustomization = EditorGUILayout.Foldout(showCustomization, "Visual Customization", true);
-            EditorGUI.indentLevel--;
-
             if (showCustomization)
             {
                 EditorGUI.indentLevel++;
-                EditorGUILayout.Space(5);
-
                 EditorGUILayout.LabelField("Colors", EditorStyles.boldLabel);
                 EditorGUILayout.PropertyField(bgColorProp);
                 EditorGUILayout.PropertyField(accentColorProp);
@@ -152,37 +140,30 @@ namespace NoSlimes.Util.UniTerminal.Editor
                 EditorGUILayout.PropertyField(errorColorProp);
                 EditorGUILayout.PropertyField(assertColorProp);
 
-                EditorGUILayout.Space(10);
+                EditorGUILayout.Space(5);
                 EditorGUILayout.LabelField("Typography", EditorStyles.boldLabel);
                 EditorGUILayout.PropertyField(consoleFontProp);
                 EditorGUILayout.PropertyField(inputFontSizeProp);
                 EditorGUILayout.PropertyField(logFontSizeProp);
-
                 EditorGUI.indentLevel--;
-                EditorGUILayout.Space(5);
             }
             EditorGUILayout.EndVertical();
 
-            serializedObject.ApplyModifiedProperties();
+            if (EditorGUI.EndChangeCheck())
+            {
+                serializedObject.ApplyModifiedProperties();
+            }
         }
 
-        /// <summary>
-        /// Draws a contained inspector section with a bold header.
-        /// </summary>
         private void DrawSection(string title, System.Action drawContent)
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.Space(2);
             EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
-            EditorGUILayout.Space(2);
-
             EditorGUI.indentLevel++;
-            drawContent.Invoke();
+            drawContent?.Invoke();
             EditorGUI.indentLevel--;
-
-            EditorGUILayout.Space(3);
             EditorGUILayout.EndVertical();
-            EditorGUILayout.Space(5);
+            EditorGUILayout.Space(2);
         }
     }
 }
