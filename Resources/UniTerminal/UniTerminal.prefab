@@ -773,7 +773,7 @@ GameObject:
   - component: {fileID: 6355765652959282147}
   - component: {fileID: 923030185246429786}
   - component: {fileID: 6766470046139699116}
-  - component: {fileID: 1418001293816270086}
+  - component: {fileID: 8240971948002935708}
   m_Layer: 0
   m_Name: Resize Handle
   m_TagString: Untagged
@@ -838,7 +838,7 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &1418001293816270086
+--- !u!114 &8240971948002935708
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -847,7 +847,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3646612796496878711}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24315200e225d954aa3bdac291b5a185, type: 3}
+  m_Script: {fileID: 11500000, guid: 59ad56ec53db5fb42a0101da90e60c83, type: 3}
   m_Name: 
   m_EditorClassIdentifier: NoSlimes.UniTerminal.Runtime::NoSlimes.Util.UniTerminal.ConsoleUIResizeHandle
   targetPanel: {fileID: 2516419311204026624}
@@ -1381,7 +1381,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1985921220913995921}
-  - component: {fileID: 2356108114652844079}
+  - component: {fileID: 9020167229970197835}
   m_Layer: 0
   m_Name: UniTerminal
   m_TagString: Untagged
@@ -1405,7 +1405,7 @@ Transform:
   - {fileID: 8895166139903250448}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2356108114652844079
+--- !u!114 &9020167229970197835
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1414,9 +1414,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 7146063643490763698}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 987cb7b3fa8c8554e9d9e74071e8fc46, type: 3}
+  m_Script: {fileID: 11500000, guid: 5c710e5e759b03140a9e085c39e97250, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: NoSlimes.UniTerminal.Runtime::NoSlimes.Util.UniTerminal.UniTerminalUI
   inputSystem: 1
   toggleConsoleAction: {fileID: 0}
   autoCompleteAction: {fileID: 0}

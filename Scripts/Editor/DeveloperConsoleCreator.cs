@@ -31,7 +31,7 @@ namespace NoSlimes.Util.UniTerminal.Editor
                 return null;
             }
 
-            GameObject tempInstance = (GameObject)PrefabUtility.InstantiatePrefab(sourcePrefab);
+            GameObject tempInstance = Object.Instantiate(sourcePrefab);
             string dstPath = GetCurrentFolderPath() + $"/{sourcePrefab.name}.prefab";
             dstPath = AssetDatabase.GenerateUniqueAssetPath(dstPath);
 

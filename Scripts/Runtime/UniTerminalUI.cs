@@ -307,7 +307,7 @@ namespace NoSlimes.Util.UniTerminal
                 LogType.Error => FormatColorLocal(errorColor),
                 LogType.Exception => FormatColorLocal(exceptionColor),
                 LogType.Assert => FormatColorLocal(assertColor),
-                _ => "white",
+                _ => "#FFFFFFFF",
             };
 
             LogToConsole($"<color={color}>{logString}</color>");
@@ -315,7 +315,7 @@ namespace NoSlimes.Util.UniTerminal
 
             static string FormatColorLocal(Color color)
             {
-                return ColorUtility.ToHtmlStringRGBA(color);
+                return $"#{ColorUtility.ToHtmlStringRGBA(color)}";
             }
         }
 
