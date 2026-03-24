@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace NoSlimes.Util.UniTerminal.Editor
 {
-    internal static class DeveloperConsoleCreator
+    internal static class UniTerminalPrefabInstantiator
     {
         [MenuItem("Assets/Create/UniTerminal/UniTerminal", priority = 81)]
         [MenuItem("Tools/UniTerminal/Create UniTerminal Prefab", priority = 81)]
@@ -31,7 +31,7 @@ namespace NoSlimes.Util.UniTerminal.Editor
                 return null;
             }
 
-            GameObject tempInstance = Object.Instantiate(sourcePrefab);
+            GameObject tempInstance = (GameObject)PrefabUtility.InstantiatePrefab(sourcePrefab);
             string dstPath = GetCurrentFolderPath() + $"/{sourcePrefab.name}.prefab";
             dstPath = AssetDatabase.GenerateUniqueAssetPath(dstPath);
 

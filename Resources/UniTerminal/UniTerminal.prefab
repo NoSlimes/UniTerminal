@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 7168569745585191829}
   - component: {fileID: 2488519329302138351}
   m_Layer: 0
-  m_Name: InputField (TMP)
+  m_Name: InputField
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -181,7 +181,7 @@ GameObject:
   - component: {fileID: 4727776447825576445}
   - component: {fileID: 4274164997945497877}
   m_Layer: 0
-  m_Name: Scroll View
+  m_Name: ScrollView
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -773,7 +773,7 @@ GameObject:
   - component: {fileID: 6355765652959282147}
   - component: {fileID: 923030185246429786}
   - component: {fileID: 6766470046139699116}
-  - component: {fileID: 8240971948002935708}
+  - component: {fileID: 493406070864712321}
   m_Layer: 0
   m_Name: Resize Handle
   m_TagString: Untagged
@@ -838,7 +838,7 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &8240971948002935708
+--- !u!114 &493406070864712321
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -847,7 +847,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3646612796496878711}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 59ad56ec53db5fb42a0101da90e60c83, type: 3}
+  m_Script: {fileID: 11500000, guid: 24315200e225d954aa3bdac291b5a185, type: 3}
   m_Name: 
   m_EditorClassIdentifier: NoSlimes.UniTerminal.Runtime::NoSlimes.Util.UniTerminal.ConsoleUIResizeHandle
   targetPanel: {fileID: 2516419311204026624}
@@ -1381,7 +1381,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1985921220913995921}
-  - component: {fileID: 9020167229970197835}
+  - component: {fileID: 7787681465433023132}
   m_Layer: 0
   m_Name: UniTerminal
   m_TagString: Untagged
@@ -1405,7 +1405,7 @@ Transform:
   - {fileID: 8895166139903250448}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &9020167229970197835
+--- !u!114 &7787681465433023132
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1414,14 +1414,86 @@ MonoBehaviour:
   m_GameObject: {fileID: 7146063643490763698}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5c710e5e759b03140a9e085c39e97250, type: 3}
+  m_Script: {fileID: 11500000, guid: 987cb7b3fa8c8554e9d9e74071e8fc46, type: 3}
   m_Name: 
   m_EditorClassIdentifier: NoSlimes.UniTerminal.Runtime::NoSlimes.Util.UniTerminal.UniTerminalUI
-  inputSystem: 1
-  toggleConsoleAction: {fileID: 0}
-  autoCompleteAction: {fileID: 0}
+  inputSystem: 0
+  toggleConsoleActionReference: {fileID: 0}
+  autoCompleteActionReference: {fileID: 0}
+  historyUpActionReference: {fileID: 0}
+  historyDownActionReference: {fileID: 0}
+  toggleConsoleAction:
+    m_Name: ToggleConsole
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: c2f052ea-5b85-4fc1-b4c3-af089897d7db
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings:
+    - m_Name: 
+      m_Id: a4fc5ef5-9358-4ce6-9d6b-68da2ea65b89
+      m_Path: <Keyboard>/backquote
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: ToggleConsole
+      m_Flags: 0
+    m_Flags: 0
+  autoCompleteAction:
+    m_Name: AutoComplete
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: 2cd07813-9659-4be7-8d71-e18236e7bd34
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings:
+    - m_Name: 
+      m_Id: bc8e4615-8b4a-405c-8710-c90ff25f9ba7
+      m_Path: <Keyboard>/tab
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: AutoComplete
+      m_Flags: 0
+    m_Flags: 0
+  historyUpAction:
+    m_Name: HistoryUp
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: 091ed024-fc5d-45b3-95a8-c32143a33df1
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings:
+    - m_Name: 
+      m_Id: d3af7b0a-0fec-48ad-8c9b-aa1592aa1360
+      m_Path: <Keyboard>/upArrow
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: HistoryUp
+      m_Flags: 0
+    m_Flags: 0
+  historyDownAction:
+    m_Name: HistoryDown
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: 925ad1f3-0752-4186-a822-6b638045203b
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings:
+    - m_Name: 
+      m_Id: 5656c113-1474-493e-8be6-c8cec37dc208
+      m_Path: <Keyboard>/downArrow
+      m_Interactions: 
+      m_Processors: 
+      m_Groups: 
+      m_Action: HistoryDown
+      m_Flags: 0
+    m_Flags: 0
   toggleConsoleKey: 96
   autoCompleteKey: 9
+  historyUpKey: 273
+  historyDownKey: 274
   consolePanel: {fileID: 5015057225602263469}
   inputField: {fileID: 7168569745585191829}
   hintText: {fileID: 4570451252686862793}
@@ -1433,6 +1505,7 @@ MonoBehaviour:
   controlCursorLockMode: 1
   loadCacheOnAwake: 1
   commandSeparator: 124
+  applyStyles: 1
   backgroundColor: {r: 0, g: 0, b: 0, a: 0.95}
   accentColor: {r: 1, g: 1, b: 1, a: 1}
   textColor: {r: 1, g: 1, b: 1, a: 1}
@@ -1440,7 +1513,7 @@ MonoBehaviour:
   errorColor: {r: 1, g: 0, b: 0, a: 1}
   exceptionColor: {r: 1, g: 0, b: 0, a: 1}
   assertColor: {r: 1, g: 0.6, b: 0.6, a: 1}
-  consoleFont: {fileID: 0}
+  consoleFont: {fileID: 11400000, guid: bc6c37bf910742642a3e463c2ccd18c4, type: 2}
   inputFontSize: 14
   logFontSize: 20
 --- !u!1 &8077833049188354319

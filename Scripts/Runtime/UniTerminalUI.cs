@@ -5,7 +5,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Text.RegularExpressions;
 
 #if ENABLE_INPUT_SYSTEM
@@ -18,18 +17,26 @@ namespace NoSlimes.Util.UniTerminal
     {
         private static UniTerminalUI _instance;
 
-        public enum InputSystemType { New, Old }
+        public enum InputSystemType { New, New_ActionReferences, Old }
 
         [SerializeField] private InputSystemType inputSystem = InputSystemType.Old;
 #if ENABLE_INPUT_SYSTEM
-        [SerializeField] private InputActionReference toggleConsoleAction;
-        [SerializeField] private InputActionReference autoCompleteAction;
-        private InputAction historyUpAction;
-        private InputAction historyDownAction;
+        [SerializeField] private InputActionReference toggleConsoleActionReference;
+        [SerializeField] private InputActionReference autoCompleteActionReference;
+        [SerializeField] private InputActionReference historyUpActionReference;
+        [SerializeField] private InputActionReference historyDownActionReference;
+
+        [SerializeField] private InputAction toggleConsoleAction;
+        [SerializeField] private InputAction autoCompleteAction;
+        [SerializeField] private InputAction historyUpAction;
+        [SerializeField] private InputAction historyDownAction;
 #endif
 
         [SerializeField] private KeyCode toggleConsoleKey = KeyCode.BackQuote;
         [SerializeField] private KeyCode autoCompleteKey = KeyCode.Tab;
+        [SerializeField] private KeyCode historyUpKey = KeyCode.UpArrow;
+        [SerializeField] private KeyCode historyDownKey = KeyCode.DownArrow;
+
         [SerializeField] private GameObject consolePanel;
         [SerializeField] private TMP_InputField inputField;
         [SerializeField] private TMP_Text hintText;
@@ -42,6 +49,7 @@ namespace NoSlimes.Util.UniTerminal
         [SerializeField] private bool loadCacheOnAwake = true;
         [SerializeField] private char commandSeparator = '|';
 
+        [SerializeField] private bool applyStyles = true;
         [SerializeField] private Color backgroundColor = new(0f, 0f, 0f, 0.95f);
         [SerializeField] private Color accentColor = new(1f, 1f, 1f, 1f);
         [SerializeField] private Color textColor = Color.white;
@@ -94,12 +102,6 @@ namespace NoSlimes.Util.UniTerminal
                 Debug.LogWarning("Developer Console: New Input System is not enabled. Switching to Old Input System.");
                 inputSystem = InputSystemType.Old;
             }
-#else
-            if (inputSystem == InputSystemType.New)
-            {
-                historyUpAction = new InputAction("HistoryUp", binding: "<Keyboard>/upArrow");
-                historyDownAction = new InputAction("HistoryDown", binding: "<Keyboard>/downArrow");
-            }
 #endif
 
             GetComponentInChildren<Canvas>().sortingOrder = 1000;
@@ -118,6 +120,9 @@ namespace NoSlimes.Util.UniTerminal
 
         protected virtual void ApplyStyles()
         {
+            if (!applyStyles)
+                return;
+
             if (consolePanel.TryGetComponent(out Image consolePanelImage))
             {
                 consolePanelImage.color = backgroundColor;
@@ -164,7 +169,7 @@ namespace NoSlimes.Util.UniTerminal
 
                 string[] commands = cmd.Split(commandSeparator, StringSplitOptions.RemoveEmptyEntries);
 
-                foreach (var singleCommand in commands)
+                foreach (string singleCommand in commands)
                 {
                     string trimmedCommand = singleCommand.Trim();
                     if (string.IsNullOrEmpty(trimmedCommand)) continue;
@@ -200,13 +205,43 @@ namespace NoSlimes.Util.UniTerminal
             consolePanel.SetActive(false);
 
 #if ENABLE_INPUT_SYSTEM
-            if (inputSystem == InputSystemType.New)
+            if (inputSystem != InputSystemType.Old)
             {
+                if (inputSystem == InputSystemType.New_ActionReferences)
+                {
+                    if (toggleConsoleActionReference != null)
+                        toggleConsoleAction = toggleConsoleActionReference.action;
+                    else
+                        Debug.LogWarning("[UniTerminal] Toggle Console Action Reference is not set. Will use configured default action, if any.");
+
+                    if (autoCompleteActionReference != null)
+                        autoCompleteAction = autoCompleteActionReference.action;
+                    else
+                        Debug.LogWarning("[UniTerminal] Auto Complete Action Reference is not set. Will use configured default action, if any.");
+
+                    if (historyUpActionReference != null)
+                        historyUpAction = historyUpActionReference.action;
+                    else
+                        Debug.LogWarning("[UniTerminal] History Up Action Reference is not set. Will use configured default action, if any.");
+
+                    if (historyDownActionReference != null)
+                        historyDownAction = historyDownActionReference.action;
+                    else
+                        Debug.LogWarning("[UniTerminal] History Down Action Reference is not set. Will use configured default action, if any.");
+                }
+
                 if (toggleConsoleAction != null)
                 {
-                    toggleConsoleAction.action.performed += OnToggleConsoleAction;
-                    toggleConsoleAction.action.Enable();
+                    toggleConsoleAction.performed += OnToggleConsoleAction;
+                    toggleConsoleAction.Enable();
                 }
+
+                if (autoCompleteAction != null)
+                {
+                    autoCompleteAction.performed += _ => AutoComplete();
+                    autoCompleteAction.Enable();
+                }
+
                 if (historyUpAction != null)
                 {
                     historyUpAction.performed += _ => NavigateCommandHistory(-1);
@@ -216,11 +251,6 @@ namespace NoSlimes.Util.UniTerminal
                 {
                     historyDownAction.performed += _ => NavigateCommandHistory(1);
                     historyDownAction.Enable();
-                }
-                if (autoCompleteAction != null)
-                {
-                    autoCompleteAction.action.performed += _ => AutoComplete();
-                    autoCompleteAction.action.Enable();
                 }
             }
 #endif
@@ -238,10 +268,11 @@ namespace NoSlimes.Util.UniTerminal
             if (inputSystem == InputSystemType.New)
             {
                 if (toggleConsoleAction != null)
-                    toggleConsoleAction.action.performed -= OnToggleConsoleAction;
+                    toggleConsoleAction.performed -= OnToggleConsoleAction;
+
                 historyUpAction?.Disable();
                 historyDownAction?.Disable();
-                autoCompleteAction.action?.Disable();
+                autoCompleteAction?.Disable();
             }
 #endif
         }
@@ -249,6 +280,70 @@ namespace NoSlimes.Util.UniTerminal
         private void OnDestroy()
         {
             ConsoleCommandInvoker.LogHandler -= LogToConsole;
+        }
+
+        private void Reset()
+        {
+#if ENABLE_INPUT_SYSTEM
+            inputSystem = InputSystemType.New;
+#else
+            inputSystem = InputSystemType.Old;
+#endif
+
+            toggleConsoleAction = new InputAction("ToggleConsole", binding: "<Keyboard>/backquote");
+            autoCompleteAction = new InputAction("AutoComplete", binding: "<Keyboard>/tab");
+            historyUpAction = new InputAction("HistoryUp", binding: "<Keyboard>/upArrow");
+            historyDownAction = new InputAction("HistoryDown", binding: "<Keyboard>/downArrow");
+
+            var panel = FindDeep(transform, "Panel");
+            if (!panel)
+            {
+                Debug.LogError("Panel not found anywhere under this object", this);
+                return;
+            }
+
+            consolePanel = panel.gameObject;
+
+            var input = FindDeep(panel, "InputField");
+            if (!input || !input.TryGetComponent(out inputField))
+            {
+                Debug.LogError("InputField missing or TMP_InputField not attached", this);
+                return;
+            }
+
+            var hint = FindDeep(input, "HintText");
+            if (!hint || !hint.TryGetComponent(out hintText))
+            {
+                Debug.LogError("HintText missing or TMP_Text not attached", this);
+                return;
+            }
+
+            var scroll = FindDeep(panel, "ScrollView");
+            if (!scroll || !scroll.TryGetComponent(out scrollRect))
+            {
+                Debug.LogError("ScrollView missing or ScrollRect not attached", this);
+                return;
+            }
+
+            consoleLog = scrollRect.content?.GetComponentInChildren<TMP_Text>();
+            if (!consoleLog)
+            {
+                Debug.LogError("Console log text not found in ScrollView content", this);
+            }
+
+            static Transform FindDeep(Transform parent, string name)
+            {
+                foreach (Transform child in parent)
+                {
+                    if (child.name == name)
+                        return child;
+
+                    var result = FindDeep(child, name);
+                    if (result != null)
+                        return result;
+                }
+                return null;
+            }
         }
 
         private void Update()
@@ -270,8 +365,8 @@ namespace NoSlimes.Util.UniTerminal
 
                 if (consolePanel.activeSelf && inputField.isFocused)
                 {
-                    if (Input.GetKeyDown(KeyCode.UpArrow)) NavigateCommandHistory(-1);
-                    else if (Input.GetKeyDown(KeyCode.DownArrow)) NavigateCommandHistory(1);
+                    if (Input.GetKeyDown(historyUpKey)) NavigateCommandHistory(-1);
+                    else if (Input.GetKeyDown(historyDownKey)) NavigateCommandHistory(1);
                     else if (Input.GetKeyDown(autoCompleteKey)) AutoComplete();
                 }
             }
@@ -510,7 +605,7 @@ namespace NoSlimes.Util.UniTerminal
         private void AutoComplete()
         {
             var ctx = ParseCommandContext(inputField.text, inputField.caretPosition);
-            UpdateHoverContext(inputField.text); 
+            UpdateHoverContext(inputField.text);
 
             string cleanLastPrefix = lastTypedPrefix.Replace("\"", "");
 
@@ -534,7 +629,7 @@ namespace NoSlimes.Util.UniTerminal
                         foreach (var entry in entries)
                         {
                             var results = ConsoleCommandInvoker.GetAutoCompleteSuggestions(entry.MethodInfo, hoveredParamIndex, ctx.CurrentPrefix);
-                            foreach (var s in results) suggestions.Add(s);
+                            foreach (string s in results) suggestions.Add(s);
                         }
                         currentMatches = suggestions
                             .OrderByDescending(s => s.StartsWith(ctx.CurrentPrefix, StringComparison.OrdinalIgnoreCase))
@@ -597,7 +692,7 @@ namespace NoSlimes.Util.UniTerminal
             else
                 Application.logMessageReceived -= _instance.HandleLogMessage;
 
-            var color = _instance.catchUnityLogs ? "green" : "red";
+            string color = _instance.catchUnityLogs ? "green" : "red";
             response($"Unity logs are now <color={color}>{(_instance.catchUnityLogs ? "enabled" : "disabled")}</color>");
         }
         #endregion
