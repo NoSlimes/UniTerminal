@@ -21,7 +21,7 @@ namespace NoSlimes.Util.UniTerminal
             public static Color SecondaryErrorColor = new(1f, 0.6f, 0.6f);
         }
 
-        private static string Colorize(string text, Color color)
+        internal static string Colorize(string text, Color color)
         {
             return $"<color=#{ColorUtility.ToHtmlStringRGBA(color)}>{text}</color>";
         }
@@ -89,15 +89,26 @@ namespace NoSlimes.Util.UniTerminal
 
             RegisterArgConverter<Color>(static arg =>
             {
+                if (ColorUtility.TryParseHtmlString(arg, out Color col))
+                    return col;
+
                 string[] parts = arg.Trim('(', ')').Split(',');
-                if (parts.Length != 4)
-                    throw new ArgumentException($"Could not convert '{arg}' to {typeof(Color).Name}");
-                return new Color(
-                    float.Parse(parts[0]),
-                    float.Parse(parts[1]),
-                    float.Parse(parts[2]),
-                    float.Parse(parts[3])
-                );
+                if (parts.Length == 4)
+                {
+                    return new Color(
+                        float.Parse(parts[0]),
+                        float.Parse(parts[1]),
+                        float.Parse(parts[2]),
+                        float.Parse(parts[3])
+                    );
+                }
+
+                if (parts.Length == 3)
+                {
+                    return new Color(float.Parse(parts[0]), float.Parse(parts[1]), float.Parse(parts[2]), 1f);
+                }
+
+                throw new ArgumentException($"Could not convert '{arg}' to Color. Use 'red', '#FF0000' or '(r,g,b,a)'.");
             });
 
             RegisterArgConverter<Quaternion>(static arg =>
@@ -184,6 +195,12 @@ namespace NoSlimes.Util.UniTerminal
         internal static void Log(string message, bool success)
         {
             LogHandler(message, success);
+        }
+
+        internal static void Log(string message, Color color)
+        {
+            message = Colorize(message, color);
+            LogHandler(message, true);
         }
 
         internal static void Execute(string input)
@@ -514,8 +531,8 @@ namespace NoSlimes.Util.UniTerminal
                             {
                                 var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, new object[] { relativeArgIndex });
                                 return (suggestions ?? Array.Empty<string>())
-                                    .Where(s => s.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0) // Hitta "bear" i "large beartrap"
-                                    .OrderByDescending(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) // Prioritera de som börjar på "bear"
+                                    .Where(s => s.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0) 
+                                    .OrderByDescending(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) 
                                     .ThenBy(s => s);
                             }
                         case 0:
@@ -540,7 +557,7 @@ namespace NoSlimes.Util.UniTerminal
             if (paramType == typeof(bool))
                 return new[] { "true", "false" }
                     .Where(v => v.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
-                    .OrderByDescending(v => v.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)); // Reverse to suggest 'true' first
+                    .OrderByDescending(v => v.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)); 
 
             if (paramType.IsEnum)
             {

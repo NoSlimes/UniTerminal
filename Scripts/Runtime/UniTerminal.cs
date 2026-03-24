@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
+using UnityEngine;
 using static NoSlimes.Util.UniTerminal.ConsoleCommandCache;
 
 namespace NoSlimes.Util.UniTerminal
@@ -63,6 +64,13 @@ namespace NoSlimes.Util.UniTerminal
         /// <param name="message">The text to log.</param>
         /// <param name="success">If <c>false</c>, the message will be logged as an error (usually red).</param>
         public static void Log(string message, bool success = true) => ConsoleCommandInvoker.Log(message, success);
+
+        /// <summary>
+        /// Logs a message to the UniTerminal console window using the specified text color.
+        /// </summary>
+        /// <param name="message">The text to log.</param>
+        /// <param name="color">The color to use when displaying the message.</param>
+        public static void Log(string message, Color color) => ConsoleCommandInvoker.Log(message, color);
 
         /// <summary>
         /// Gets or sets whether Cheat commands are allowed to run.
