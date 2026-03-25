@@ -28,10 +28,10 @@ namespace NoSlimes.Util.UniTerminal
         [SerializeField] private InputActionReference historyUpActionReference;
         [SerializeField] private InputActionReference historyDownActionReference;
 
-        [SerializeField] private InputAction toggleConsoleAction;
-        [SerializeField] private InputAction autoCompleteAction;
-        [SerializeField] private InputAction historyUpAction;
-        [SerializeField] private InputAction historyDownAction;
+        [SerializeField] private InputAction toggleConsoleAction = new("ToggleConsole", binding: "<Keyboard>/backquote");
+        [SerializeField] private InputAction autoCompleteAction = new("AutoComplete", binding: "<Keyboard>/tab");
+        [SerializeField] private InputAction historyUpAction = new("HistoryUp", binding: "<Keyboard>/upArrow");
+        [SerializeField] private InputAction historyDownAction = new("HistoryDown", binding: "<Keyboard>/downArrow");
 #endif
 
         [SerializeField] private KeyCode toggleConsoleKey = KeyCode.BackQuote;
@@ -297,7 +297,7 @@ namespace NoSlimes.Util.UniTerminal
             historyUpAction = new InputAction("HistoryUp", binding: "<Keyboard>/upArrow");
             historyDownAction = new InputAction("HistoryDown", binding: "<Keyboard>/downArrow");
 
-            var panel = FindDeep(transform, "Panel");
+            Transform panel = FindDeep(transform, "Panel");
             if (!panel)
             {
                 Debug.LogError("Panel not found anywhere under this object", this);
@@ -306,21 +306,21 @@ namespace NoSlimes.Util.UniTerminal
 
             consolePanel = panel.gameObject;
 
-            var input = FindDeep(panel, "InputField");
+            Transform input = FindDeep(panel, "InputField");
             if (!input || !input.TryGetComponent(out inputField))
             {
                 Debug.LogError("InputField missing or TMP_InputField not attached", this);
                 return;
             }
 
-            var hint = FindDeep(input, "HintText");
+            Transform hint = FindDeep(input, "HintText");
             if (!hint || !hint.TryGetComponent(out hintText))
             {
                 Debug.LogError("HintText missing or TMP_Text not attached", this);
                 return;
             }
 
-            var scroll = FindDeep(panel, "ScrollView");
+            Transform scroll = FindDeep(panel, "ScrollView");
             if (!scroll || !scroll.TryGetComponent(out scrollRect))
             {
                 Debug.LogError("ScrollView missing or ScrollRect not attached", this);
@@ -340,7 +340,7 @@ namespace NoSlimes.Util.UniTerminal
                     if (child.name == name)
                         return child;
 
-                    var result = FindDeep(child, name);
+                    Transform result = FindDeep(child, name);
                     if (result != null)
                         return result;
                 }
@@ -521,7 +521,7 @@ namespace NoSlimes.Util.UniTerminal
 
             for (int i = 0; i < matches.Count; i++)
             {
-                var m = matches[i];
+                Match m = matches[i];
                 if (caretInTrimmed <= m.Index + m.Length)
                 {
                     partIndex = i;
@@ -550,7 +550,7 @@ namespace NoSlimes.Util.UniTerminal
 
         private void UpdateHoverContext(string input)
         {
-            var ctx = ParseCommandContext(input, inputField.caretPosition);
+            CommandContext ctx = ParseCommandContext(input, inputField.caretPosition);
 
             hoveredParamIndex = Math.Max(0, ctx.CurrentPartIndex - 1);
 
@@ -558,14 +558,14 @@ namespace NoSlimes.Util.UniTerminal
             {
                 string cmdName = ctx.Parts[0].ToLower();
 
-                if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out var commandEntries))
+                if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out List<ConsoleCommandCache.CommandEntry> commandEntries))
                 {
                     string[] args = ctx.Parts.Skip(1).ToArray();
 
-                    var names = commandEntries
+                    IEnumerable<string> names = commandEntries
                         .Select(e =>
                         {
-                            var parameters = e.MethodInfo.GetParameters();
+                            ParameterInfo[] parameters = e.MethodInfo.GetParameters();
 
                             int resolvedIndex = ResolveParameterIndex(
                                 e.MethodInfo,
@@ -576,7 +576,7 @@ namespace NoSlimes.Util.UniTerminal
                             if (resolvedIndex < 0 || resolvedIndex >= parameters.Length)
                                 return null;
 
-                            var p = parameters[resolvedIndex];
+                            ParameterInfo p = parameters[resolvedIndex];
 
                             if (p.ParameterType == typeof(Action<string>) ||
                                 p.ParameterType == typeof(Action<string, bool>) ||
@@ -606,7 +606,7 @@ namespace NoSlimes.Util.UniTerminal
 
         private static int ResolveParameterIndex(MethodInfo method, string[] args, int argIndex)
         {
-            var parameters = method.GetParameters();
+            ParameterInfo[] parameters = method.GetParameters();
 
             bool hasDelegate = parameters.Length > 0 &&
                 (parameters[0].ParameterType == typeof(Action<string>) ||
@@ -618,7 +618,7 @@ namespace NoSlimes.Util.UniTerminal
 
             for (int i = 0; i < argIndex && paramIndex < parameters.Length; i++)
             {
-                var p = parameters[paramIndex];
+                ParameterInfo p = parameters[paramIndex];
                 bool isParams = p.GetCustomAttribute<ParamArrayAttribute>() != null;
 
                 if (isParams)
@@ -666,7 +666,7 @@ namespace NoSlimes.Util.UniTerminal
 
         private void AutoComplete()
         {
-            var ctx = ParseCommandContext(inputField.text, inputField.caretPosition);
+            CommandContext ctx = ParseCommandContext(inputField.text, inputField.caretPosition);
             UpdateHoverContext(inputField.text);
 
             string cleanLastPrefix = lastTypedPrefix.Replace("\"", "");
@@ -685,12 +685,12 @@ namespace NoSlimes.Util.UniTerminal
                 }
                 else
                 {
-                    if (ConsoleCommandRegistry.Commands.TryGetValue(ctx.Parts[0].ToLower(), out var entries))
+                    if (ConsoleCommandRegistry.Commands.TryGetValue(ctx.Parts[0].ToLower(), out List<ConsoleCommandCache.CommandEntry> entries))
                     {
                         HashSet<string> suggestions = new();
-                        foreach (var entry in entries)
+                        foreach (ConsoleCommandCache.CommandEntry entry in entries)
                         {
-                            var results = ConsoleCommandInvoker.GetAutoCompleteSuggestions(entry.MethodInfo, hoveredParamIndex, ctx.CurrentPrefix);
+                            IEnumerable<string> results = ConsoleCommandInvoker.GetAutoCompleteSuggestions(entry.MethodInfo, hoveredParamIndex, ctx.CurrentPrefix);
                             foreach (string s in results) suggestions.Add(s);
                         }
                         currentMatches = suggestions
