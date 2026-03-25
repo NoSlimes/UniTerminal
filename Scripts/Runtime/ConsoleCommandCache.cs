@@ -12,8 +12,14 @@ namespace NoSlimes.Util.UniTerminal
         public class CommandEntry
         {
             public string CommandName;
+            public string Group;
+            public string Key;
+
+            public string[] Aliases;
             public string Description;
             public CommandFlags Flags;
+            
+            public string AutoCompleteProvider;
 
             // Binding info
             public string DeclaringTypeName;

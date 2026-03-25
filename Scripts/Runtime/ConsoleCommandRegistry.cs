@@ -20,9 +20,23 @@ namespace NoSlimes.Util.UniTerminal
     {
         private static ConsoleCommandCache cache;
         private static readonly HashSet<Assembly> runtimeAssemblies = new();
+
         private static readonly Dictionary<string, List<CommandEntry>> _commands = new();
+        private static readonly Dictionary<string, List<CommandEntry>> _commandsByGroup = new();
+
+        // NEW: alias tracking dictionary
+        private static readonly Dictionary<string, CommandEntry> _aliasLookup = new();
+
         internal static IReadOnlyDictionary<string, List<CommandEntry>> Commands => _commands;
+        internal static IReadOnlyDictionary<string, List<CommandEntry>> CommandsBygroup => _commandsByGroup;
+        internal static IReadOnlyDictionary<string, CommandEntry> AliasLookup => _aliasLookup;
+
         internal static event Action<double> OnCacheLoaded;
+
+        public static bool IsAlias(string input, out CommandEntry entry)
+        {
+            return _aliasLookup.TryGetValue(input.ToLowerInvariant(), out entry);
+        }
 
 #if UNITY_EDITOR
         static ConsoleCommandRegistry()
@@ -32,21 +46,16 @@ namespace NoSlimes.Util.UniTerminal
 
         private static void AfterAssemblyReload()
         {
-            static void callback()
+            if (UniTerminalSettings.instance != null && UniTerminalSettings.instance.IsAutoRebuildEnabled && EditorApplication.isPlaying)
             {
-                DiscoverCommandsEditor();
-                EditorApplication.delayCall -= callback;
+                EditorApplication.delayCall += () => DiscoverCommandsEditor();
             }
-
-            if (UniTerminalSettings.instance.IsAutoRebuildEnabled)
-                EditorApplication.delayCall += callback;
         }
 
         [MenuItem("Tools/UniTerminal/Manual Build Command Cache")]
         internal static async void DiscoverCommandsEditor()
         {
             int taskId = Progress.Start("UniTerminal", "Building Command Cache...");
-
             try
             {
                 await DiscoverCommandsAsync(
@@ -62,21 +71,82 @@ namespace NoSlimes.Util.UniTerminal
         }
 #endif
 
+        private static void RegisterEntryInDictionary(CommandEntry entry)
+        {
+            string primaryKey = BuildKey(entry.Group, entry.CommandName);
+            AddKeyToDictionary(primaryKey, entry);
+
+            if (entry.Aliases != null)
+            {
+                foreach (var alias in entry.Aliases)
+                {
+                    if (string.IsNullOrWhiteSpace(alias)) continue;
+
+                    string aliasKey = BuildKey(entry.Group, alias);
+
+                    AddKeyToDictionary(aliasKey, entry);
+
+                    if (!_aliasLookup.ContainsKey(aliasKey))
+                        _aliasLookup[aliasKey] = entry;
+                }
+            }
+
+            AddToGroupDictionary(entry);
+        }
+
+        private static void AddKeyToDictionary(string key, CommandEntry entry)
+        {
+            if (!_commands.TryGetValue(key, out var list))
+            {
+                list = new List<CommandEntry>();
+                _commands[key] = list;
+            }
+
+            if (!list.Contains(entry))
+            {
+                list.Add(entry);
+            }
+        }
+
+        private static void AddToGroupDictionary(CommandEntry entry)
+        {
+            string groupKey = string.IsNullOrWhiteSpace(entry.Group)
+                ? string.Empty
+                : entry.Group.ToLowerInvariant();
+
+            if (!_commandsByGroup.TryGetValue(groupKey, out var list))
+            {
+                list = new List<CommandEntry>();
+                _commandsByGroup[groupKey] = list;
+            }
+
+            if (!list.Contains(entry))
+            {
+                list.Add(entry);
+            }
+        }
+
+        private static string BuildKey(string group, string name)
+        {
+            return string.IsNullOrWhiteSpace(group)
+                ? name.ToLowerInvariant()
+                : $"{group.ToLowerInvariant()}.{name.ToLowerInvariant()}";
+        }
+
         internal static void DiscoverCommands(IEnumerable<Assembly> assemblies = null, bool overwrite = true)
         {
             if (overwrite)
+            {
                 _commands.Clear();
+                _aliasLookup.Clear();
+            }
 
             assemblies ??= AppDomain.CurrentDomain.GetAssemblies();
             var validCommands = new List<CommandEntry>();
 
             foreach (var assembly in assemblies)
             {
-                Type[] types;
-                try { types = assembly.GetTypes(); }
-                catch (ReflectionTypeLoadException e) { types = e.Types.Where(t => t != null).ToArray(); }
-
-                foreach (var type in types)
+                foreach (var type in GetSafeTypes(assembly))
                 {
                     foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
                     {
@@ -84,11 +154,16 @@ namespace NoSlimes.Util.UniTerminal
                         if (attr == null) continue;
                         if (!method.IsStatic && !type.IsSubclassOf(typeof(UnityEngine.Object))) continue;
 
+                        var aliasAttrs = method.GetCustomAttributes<CommandAliasAttribute>();
+
                         var entry = new CommandEntry
                         {
-                            CommandName = attr.Command,
+                            CommandName = attr.Name,
+                            Group = attr.Group,
                             Description = attr.Description,
                             Flags = attr.Flags,
+                            AutoCompleteProvider = attr.AutoCompleteProvider,
+                            Aliases = aliasAttrs.Select(a => a.Alias).ToArray(),
                             DeclaringTypeName = type.AssemblyQualifiedName,
                             MethodName = method.Name,
                             ParameterTypes = method.GetParameters().Select(p => p.ParameterType.AssemblyQualifiedName).ToArray(),
@@ -98,14 +173,7 @@ namespace NoSlimes.Util.UniTerminal
                         };
 
                         validCommands.Add(entry);
-
-                        string key = entry.CommandName.ToLower();
-                        if (!_commands.TryGetValue(key, out var list))
-                        {
-                            list = new List<CommandEntry>();
-                            _commands[key] = list;
-                        }
-                        list.Add(entry);
+                        RegisterEntryInDictionary(entry);
                     }
                 }
             }
@@ -127,15 +195,10 @@ namespace NoSlimes.Util.UniTerminal
                 for (int i = 0; i < total; i++)
                 {
                     var assembly = assemblyList[i];
-
                     float progress = (float)i / total;
                     onProgress?.Invoke(progress, $"Scanning {assembly.GetName().Name}...");
 
-                    Type[] types;
-                    try { types = assembly.GetTypes(); }
-                    catch (ReflectionTypeLoadException e) { types = e.Types.Where(t => t != null).ToArray(); }
-
-                    foreach (var type in types)
+                    foreach (var type in GetSafeTypes(assembly))
                     {
                         foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
                         {
@@ -143,11 +206,16 @@ namespace NoSlimes.Util.UniTerminal
                             if (attr == null) continue;
                             if (!method.IsStatic && !type.IsSubclassOf(typeof(UnityEngine.Object))) continue;
 
+                            var aliasAttrs = method.GetCustomAttributes<CommandAliasAttribute>();
+
                             var entry = new CommandEntry
                             {
-                                CommandName = attr.Command,
+                                CommandName = attr.Name,
+                                Group = attr.Group,
                                 Description = attr.Description,
                                 Flags = attr.Flags,
+                                AutoCompleteProvider = attr.AutoCompleteProvider,
+                                Aliases = aliasAttrs.Select(a => a.Alias).ToArray(),
                                 DeclaringTypeName = type.AssemblyQualifiedName,
                                 MethodName = method.Name,
                                 ParameterTypes = method.GetParameters().Select(p => p.ParameterType.AssemblyQualifiedName).ToArray(),
@@ -156,7 +224,6 @@ namespace NoSlimes.Util.UniTerminal
                                 DeclaringType = type
                             };
 
-                            onProgress?.Invoke(progress, $"Found command: {entry.CommandName}");
                             valid.Add(entry);
                         }
                     }
@@ -166,19 +233,16 @@ namespace NoSlimes.Util.UniTerminal
             });
 
             if (overwrite)
+            {
                 _commands.Clear();
+                _aliasLookup.Clear();
+            }
 
             onProgress?.Invoke(0.95f, "Updating Command Dictionary...");
 
             foreach (var entry in results)
             {
-                string key = entry.CommandName.ToLower();
-                if (!_commands.TryGetValue(key, out var list))
-                {
-                    list = new List<CommandEntry>();
-                    _commands[key] = list;
-                }
-                list.Add(entry);
+                RegisterEntryInDictionary(entry);
             }
 
 #if UNITY_EDITOR
@@ -226,63 +290,65 @@ namespace NoSlimes.Util.UniTerminal
 
             cache = Resources.Load<ConsoleCommandCache>("UniTerminal/UniTerminalCommandCache");
             if (cache == null)
-                throw new InvalidOperationException("UniTerminalCommandCache asset not found at 'Resources/UniTerminal/UniTerminalCommandCache'");
+            {
+                Debug.LogError("UniTerminalCommandCache asset not found at 'Resources/UniTerminal/UniTerminalCommandCache'");
+                return;
+            }
 
             _commands.Clear();
+            _commandsByGroup.Clear();
+            _aliasLookup.Clear();
 
             foreach (var entry in cache.Commands)
             {
                 var type = Type.GetType(entry.DeclaringTypeName);
-                if (type == null)
-                {
-                    Debug.LogWarning($"Type '{entry.DeclaringTypeName}' not found.");
-                    continue;
-                }
+                if (type == null) continue;
 
                 var paramTypes = entry.ParameterTypes.Select(Type.GetType).ToArray();
-                if (paramTypes.Any(t => t == null))
-                {
-                    Debug.LogWarning($"Parameter type missing for '{entry.CommandName}'.");
-                    continue;
-                }
+                if (paramTypes.Any(t => t == null)) continue;
 
                 var method = type.GetMethod(entry.MethodName,
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance,
                     null, paramTypes, null);
 
-                if (method == null)
-                {
-                    Debug.LogWarning($"Method not found: {type.FullName}.{entry.MethodName}");
-                    continue;
-                }
-
-                if (!FilterCommand(entry))
-                    continue;
+                if (method == null) continue;
+                if (!FilterCommand(entry)) continue;
 
                 entry.MethodInfo = method;
                 entry.IsStatic = method.IsStatic;
                 entry.DeclaringType = type;
 
                 if (method.IsStatic)
-                    entry.Delegate = Delegate.CreateDelegate(Expression.GetActionType(paramTypes), method);
-
-                string key = entry.CommandName.ToLower();
-                if (!_commands.TryGetValue(key, out var list))
                 {
-                    list = new List<CommandEntry>();
-                    _commands[key] = list;
+                    try
+                    {
+                        entry.Delegate = Delegate.CreateDelegate(Expression.GetActionType(paramTypes), method);
+                    }
+                    catch { }
                 }
-                list.Add(entry);
+
+                RegisterEntryInDictionary(entry);
             }
 
             if (runtimeAssemblies.Count > 0)
             {
-                Debug.Log($"[UniTerminal] Discovering commands in {runtimeAssemblies.Count} runtime assemblies.");
                 DiscoverCommands(runtimeAssemblies, false);
             }
 
             stopwatch.Stop();
             OnCacheLoaded?.Invoke(stopwatch.Elapsed.TotalMilliseconds);
+        }
+
+        private static IEnumerable<Type> GetSafeTypes(Assembly assembly)
+        {
+            try
+            {
+                return assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException e)
+            {
+                return e.Types.Where(t => t != null);
+            }
         }
 
         private static bool FilterCommand(CommandEntry entry)
@@ -293,7 +359,10 @@ namespace NoSlimes.Util.UniTerminal
             if (entry.Flags.HasFlag(CommandFlags.DebugOnly) && !Debug.isDebugBuild)
                 return false;
 
-            return !entry.Flags.HasFlag(CommandFlags.EditorOnly) || Application.isEditor;
+            if (entry.Flags.HasFlag(CommandFlags.EditorOnly) && !Application.isEditor)
+                return false;
+
+            return true;
         }
     }
 }

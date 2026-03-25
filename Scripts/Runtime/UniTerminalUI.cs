@@ -6,6 +6,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Reflection;
+
 
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -550,29 +552,45 @@ namespace NoSlimes.Util.UniTerminal
         {
             var ctx = ParseCommandContext(input, inputField.caretPosition);
 
-            hoveredParamIndex = ctx.CurrentPartIndex - 1;
+            hoveredParamIndex = Math.Max(0, ctx.CurrentPartIndex - 1);
 
             if (ctx.CurrentPartIndex > 0 && !ctx.IsHelp)
             {
                 string cmdName = ctx.Parts[0].ToLower();
+
                 if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out var commandEntries))
                 {
+                    string[] args = ctx.Parts.Skip(1).ToArray();
+
                     var names = commandEntries
                         .Select(e =>
                         {
                             var parameters = e.MethodInfo.GetParameters();
 
-                            bool hasDelegate = parameters.Length > 0 && (
-                                parameters[0].ParameterType == typeof(Action<string>) ||
-                                parameters[0].ParameterType == typeof(Action<string, bool>) ||
-                                parameters[0].ParameterType == typeof(CommandResponseDelegate)
+                            int resolvedIndex = ResolveParameterIndex(
+                                e.MethodInfo,
+                                args,
+                                hoveredParamIndex
                             );
 
-                            int targetIndex = hasDelegate ? hoveredParamIndex + 1 : hoveredParamIndex;
+                            if (resolvedIndex < 0 || resolvedIndex >= parameters.Length)
+                                return null;
 
-                            return (targetIndex >= 0 && targetIndex < parameters.Length)
-                                   ? parameters[targetIndex].Name
-                                   : null;
+                            var p = parameters[resolvedIndex];
+
+                            if (p.ParameterType == typeof(Action<string>) ||
+                                p.ParameterType == typeof(Action<string, bool>) ||
+                                p.ParameterType == typeof(CommandResponseDelegate))
+                                return null;
+
+                            string name = p.Name;
+
+                            if (p.GetCustomAttribute<ParamArrayAttribute>() != null)
+                                name += " (params)";
+                            else if (p.HasDefaultValue)
+                                name += " (optional)";
+
+                            return name;
                         })
                         .Where(name => name != null)
                         .Distinct();
@@ -584,6 +602,50 @@ namespace NoSlimes.Util.UniTerminal
             else hoveredParamName = "";
 
             UpdateHintUI(input);
+        }
+
+        private static int ResolveParameterIndex(MethodInfo method, string[] args, int argIndex)
+        {
+            var parameters = method.GetParameters();
+
+            bool hasDelegate = parameters.Length > 0 &&
+                (parameters[0].ParameterType == typeof(Action<string>) ||
+                 parameters[0].ParameterType == typeof(Action<string, bool>) ||
+                 parameters[0].ParameterType == typeof(CommandResponseDelegate));
+
+            int paramOffset = hasDelegate ? 1 : 0;
+            int paramIndex = paramOffset;
+
+            for (int i = 0; i < argIndex && paramIndex < parameters.Length; i++)
+            {
+                var p = parameters[paramIndex];
+                bool isParams = p.GetCustomAttribute<ParamArrayAttribute>() != null;
+
+                if (isParams)
+                {
+                    return paramIndex;
+                }
+
+                try
+                {
+                    ConsoleCommandInvoker.ConvertArg(args[i], p.ParameterType);
+                    paramIndex++;
+                }
+                catch
+                {
+                    if (p.HasDefaultValue)
+                    {
+                        paramIndex++;
+                        i--;
+                    }
+                    else
+                    {
+                        return -1;
+                    }
+                }
+            }
+
+            return paramIndex < parameters.Length ? paramIndex : parameters.Length - 1;
         }
 
         private void UpdateHintUI(string input)
@@ -671,17 +733,20 @@ namespace NoSlimes.Util.UniTerminal
 #endif
 
         #region Built-in basic commands
-        [ConsoleCommand("help", "Shows a list of commands or details for one command.")]
+        [ConsoleCommand("help", Description = "Shows a list of commands or details for one command.")]
+        [CommandAlias("h")]
         private static void HelpCommand(Action<string> response, string commandName = "")
         {
             string output = ConsoleCommandInvoker.GetHelp(commandName);
             response(output);
         }
 
-        [ConsoleCommand("clear", "Clears the console log.")]
+        [ConsoleCommand("clear", Description = "Clears the console log.")]
+        [CommandAlias("c")]
         private static void ClearCommand() => ClearLog();
 
-        [ConsoleCommand("toggleUnityLogs", "Toggles display of unity debug logs")]
+        [ConsoleCommand("toggleUnityLogs", Description = "Toggles display of unity debug logs")]
+        [CommandAlias("logs")]
         private static void ToggleUnityLogsCommand(Action<string> response)
         {
             if (_instance == null) return;

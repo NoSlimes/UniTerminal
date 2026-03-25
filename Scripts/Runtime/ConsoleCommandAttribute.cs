@@ -16,48 +16,48 @@ namespace NoSlimes.Util.UniTerminal
     [AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
     public sealed class ConsoleCommandAttribute : Attribute
     {
-        public string Command { get; }
-        public string Description { get; }
-
+        public string Name { get; }
+        public string Group { get; set; } = "";
+        public string Description { get; set; } = "";
         public CommandFlags Flags { get; set; } = CommandFlags.None;
         public string AutoCompleteProvider { get; set; } = "";
 
-        public ConsoleCommandAttribute(string command)
+        public ConsoleCommandAttribute(string name)
         {
-            Command = command;
-            Description = "";
+            Name = name;
         }
 
-        public ConsoleCommandAttribute(string command, string description)
+
+        [Obsolete("Use [ConsoleCommand(name, Description = ...)] instead.")]
+        public ConsoleCommandAttribute(string command, string description) : this(command)
         {
-            Command = command;
             Description = description;
         }
 
 
-        [Obsolete("Use [ConsoleCommand(cmd, desc, Flags = ...)] instead.")]
-        public ConsoleCommandAttribute(string command, string description, CommandFlags flags)
+        [Obsolete("Use [ConsoleCommand(name, Description = ..., Flags = ...)] instead.")]
+        public ConsoleCommandAttribute(string command, string description, CommandFlags flags) : this(command, description)
         {
-            Command = command;
-            Description = description;
             Flags = flags;
         }
 
-        [Obsolete("Use [ConsoleCommand(cmd, desc, AutoCompleteProvider = ...)] instead.")]
-        public ConsoleCommandAttribute(string command, string description, string autoCompleteMethod)
+        [Obsolete("Use [ConsoleCommand(name, Description = ..., AutoCompleteProvider = ...)] instead.")]
+        public ConsoleCommandAttribute(string command, string description, string autoCompleteMethod) : this(command, description)
         {
-            Command = command;
-            Description = description;
             AutoCompleteProvider = autoCompleteMethod;
         }
 
-        [Obsolete("Use [ConsoleCommand(cmd, desc, Flags = ..., AutoCompleteProvider = ...)] instead.")]
-        public ConsoleCommandAttribute(string command, string description, CommandFlags flags, string autoCompleteMethod)
+        [Obsolete("Use [ConsoleCommand(name, Description = ..., Flags = ..., AutoCompleteProvider = ...)] instead.")]
+        public ConsoleCommandAttribute(string command, string description, CommandFlags flags, string autoCompleteMethod) : this(command, description, flags)
         {
-            Command = command;
-            Description = description;
-            Flags = flags;
             AutoCompleteProvider = autoCompleteMethod;
         }
+    }
+
+    [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
+    public sealed class CommandAliasAttribute : Attribute
+    {
+        public string Alias { get; }
+        public CommandAliasAttribute(string alias) => Alias = alias;
     }
 }

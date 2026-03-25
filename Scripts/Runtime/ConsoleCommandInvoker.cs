@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,6 +19,13 @@ namespace NoSlimes.Util.UniTerminal
             public static Color WarningColor = Color.yellow;
             public static Color ErrorColor = Color.red;
             public static Color SecondaryErrorColor = new(1f, 0.6f, 0.6f);
+
+            // Help text colors
+            public static Color Help_SectionColor = Color.white;
+            public static Color Help_CommandColor = new(0.5f, 1f, 1f);
+            public static Color Help_MutedColor = new(0.7f, 0.7f, 0.7f);
+            public static Color Help_InfoColor = new(0.5f, 1f, .5f);
+            public static Color Help_OptionalColor = new(1f, 0.8f, 0.5f);
         }
 
         internal static string Colorize(string text, Color color)
@@ -167,7 +174,7 @@ namespace NoSlimes.Util.UniTerminal
             return results;
         }
 
-        private static object ConvertArg(string arg, Type targetType)
+        internal static object ConvertArg(string arg, Type targetType)
         {
             if (targetType == typeof(string)) return arg;
 
@@ -230,6 +237,7 @@ namespace NoSlimes.Util.UniTerminal
             foreach (CommandEntry entry in entryList)
             {
                 ParameterInfo[] parameters = entry.MethodInfo.GetParameters();
+
                 int paramOffset = 0;
 
                 bool hasResponse = parameters.Length > 0 &&
@@ -239,74 +247,148 @@ namespace NoSlimes.Util.UniTerminal
 
                 if (hasResponse) paramOffset = 1;
 
-                if (args.Length > parameters.Length - paramOffset)
+                var effectiveParams = parameters.Skip(paramOffset).ToArray();
+
+                bool hasParams = effectiveParams.Length > 0 &&
+                    effectiveParams[^1].GetCustomAttribute<ParamArrayAttribute>() != null;
+
+                int requiredCount = effectiveParams
+                    .Count(p => !p.HasDefaultValue && p.GetCustomAttribute<ParamArrayAttribute>() == null);
+
+                if (args.Length < requiredCount)
+                {
+                    candidateErrors.Add($"[{GetMethodSignature(entry.MethodInfo)}] Missing required arguments.");
+                    continue;
+                }
+
+                if (!hasParams && args.Length > effectiveParams.Length)
                 {
                     candidateErrors.Add($"[{GetMethodSignature(entry.MethodInfo)}] Too many arguments provided.");
                     continue;
                 }
 
                 object[] tempArgs = new object[parameters.Length];
+
+                // Inject callback
                 if (hasResponse)
                 {
                     Type callbackType = parameters[0].ParameterType;
 
                     if (callbackType == typeof(Action<string, bool>))
-                    {
                         tempArgs[0] = LogHandler;
-                    }
                     else if (callbackType == typeof(Action<string>))
-                    {
                         tempArgs[0] = new Action<string>(msg => LogHandler(msg, true));
-                    }
                     else if (callbackType == typeof(CommandResponseDelegate))
-                    {
                         tempArgs[0] = new CommandResponseDelegate((msg, success) => LogHandler(msg, success));
-                    }
                 }
 
-                bool success = true;
+                int argIndex = 0;
                 int score = 0;
+                bool success = true;
 
                 for (int i = paramOffset; i < parameters.Length; i++)
                 {
-                    int argIndex = i - paramOffset;
-                    if (argIndex < args.Length)
+                    var p = parameters[i];
+                    bool isParams = p.GetCustomAttribute<ParamArrayAttribute>() != null;
+
+                    int remainingArgs = args.Length - argIndex;
+
+                    int minRemainingParams = parameters
+                        .Skip(i + 1)
+                        .Count(x => !x.HasDefaultValue && x.GetCustomAttribute<ParamArrayAttribute>() == null);
+
+                    if (isParams)
+                    {
+                        Type elemType = p.ParameterType.GetElementType();
+                        int count = Math.Max(0, args.Length - argIndex);
+
+                        Array arr = Array.CreateInstance(elemType, count);
+
+                        for (int j = 0; j < count; j++)
+                        {
+                            try
+                            {
+                                object converted = ConvertArg(args[argIndex + j], elemType);
+                                arr.SetValue(converted, j);
+                                score += 1;
+                            }
+                            catch (Exception ex)
+                            {
+                                bool isOptional = p.HasDefaultValue && !isParams;
+
+                                if (isOptional)
+                                {
+                                    tempArgs[i] = p.DefaultValue;
+                                    continue;
+                                }
+
+                                if (hasParams)
+                                {
+                                    success = false;
+                                    break;
+                                }
+
+                                string msg = ex.InnerException?.Message ?? ex.Message;
+                                candidateErrors.Add($"[{GetMethodSignature(entry.MethodInfo)}] Error parsing arg '{p.Name}' ({p.ParameterType.Name}): {msg}");
+                                success = false;
+                                break;
+                            }
+                        }
+
+                        tempArgs[i] = arr;
+                        argIndex = args.Length;
+                        break;
+                    }
+
+                    bool shouldConsumeArg = true;
+
+                    if (p.HasDefaultValue)
+                    {
+                        if (remainingArgs - 1 < minRemainingParams)
+                            shouldConsumeArg = false;
+                    }
+
+                    if (shouldConsumeArg && argIndex < args.Length)
                     {
                         try
                         {
-                            tempArgs[i] = ConvertArg(args[argIndex], parameters[i].ParameterType);
+                            object converted = ConvertArg(args[argIndex], p.ParameterType);
+                            tempArgs[i] = converted;
 
-                            if (parameters[i].ParameterType == tempArgs[i].GetType())
-                                score += 2;
-                            else
-                                score += 1;
+                            score += (converted.GetType() == p.ParameterType) ? 2 : 1;
+                            argIndex++;
                         }
-                        catch (Exception ex)
+                        catch
                         {
-                            string msg = ex.InnerException?.Message ?? ex.Message;
-                            string paramName = parameters[i].Name;
-                            string typeName = parameters[i].ParameterType.Name;
+                            if (p.HasDefaultValue)
+                            {
+                                tempArgs[i] = p.DefaultValue;
+                                score += 1;
+                                continue;
+                            }
 
-                            candidateErrors.Add($"[{GetMethodSignature(entry.MethodInfo)}] Error parsing arg '{paramName}' ({typeName}): {msg}");
-
+                            candidateErrors.Add($"[{GetMethodSignature(entry.MethodInfo)}] Error parsing arg '{p.Name}' ({p.ParameterType.Name}).");
                             success = false;
                             break;
                         }
                     }
-                    else if (parameters[i].HasDefaultValue)
+                    else if (p.HasDefaultValue)
                     {
-                        tempArgs[i] = parameters[i].DefaultValue;
+                        tempArgs[i] = p.DefaultValue;
                         score += 1;
                     }
                     else
                     {
-                        candidateErrors.Add($"[{GetMethodSignature(entry.MethodInfo)}] Missing required argument '{parameters[i].Name}'.");
+                        candidateErrors.Add($"[{GetMethodSignature(entry.MethodInfo)}] Missing required argument '{p.Name}'.");
                         success = false;
                         break;
                     }
                 }
 
-                if (success && score > bestScore)
+                if (!success)
+                    continue;
+
+                if (score > bestScore)
                 {
                     bestScore = score;
                     matchedMethod = entry.MethodInfo;
@@ -316,7 +398,7 @@ namespace NoSlimes.Util.UniTerminal
 
             if (matchedMethod == null)
             {
-                LogHandler(Colorize($"Could not execute '{command}'. Potential reasons:.", Settings.ErrorColor), false);
+                LogHandler(Colorize($"Could not execute '{command}'. Potential reasons:", Settings.ErrorColor), false);
                 foreach (string error in candidateErrors)
                 {
                     LogHandler(Colorize($"- {error}", Settings.SecondaryErrorColor), false);
@@ -333,7 +415,7 @@ namespace NoSlimes.Util.UniTerminal
 
                     bool BlockLocal(string reason)
                     {
-                        LogHandler(Colorize($"Cannot run '{attr.Command}': {reason}.", Settings.WarningColor), false);
+                        LogHandler(Colorize($"Cannot run '{attr.Name}': {reason}.", Settings.WarningColor), false);
                         return true;
                     }
 
@@ -413,68 +495,192 @@ namespace NoSlimes.Util.UniTerminal
         {
             StringBuilder helpBuilder = new();
 
+            static string FormatDefault(object value)
+            {
+                if (value is null) return "null";
+                if (value is string s && s == string.Empty) return "\"\"";
+                if (value is char c) return $"'{c}'";
+                return value.ToString();
+            }
+
+            static string FormatParameter(ParameterInfo p)
+            {
+                string typeName = p.ParameterType.IsArray
+                    ? $"{p.ParameterType.GetElementType()?.Name}[]"
+                    : p.ParameterType.Name;
+
+                bool isParams = p.GetCustomAttribute<ParamArrayAttribute>() != null;
+
+                if (isParams)
+                    return Colorize($"...{p.Name}:{typeName} (params)", Settings.Help_InfoColor);
+
+                if (p.HasDefaultValue)
+                    return Colorize(
+                        $"{p.Name}:{typeName}={FormatDefault(p.DefaultValue)} (optional)",
+                        Settings.Help_OptionalColor
+                    );
+
+                return $"{p.Name}:{typeName}";
+            }
+
+            static bool IsInternalDelegate(ParameterInfo p)
+            {
+                return p.ParameterType == typeof(Action<string>) ||
+                       p.ParameterType == typeof(Action<string, bool>) ||
+                       p.ParameterType == typeof(CommandResponseDelegate);
+            }
+
+            List<string> GetAliasesForKey(string key)
+            {
+                var aliases = new HashSet<string>();
+
+                foreach (var kv in ConsoleCommandRegistry.AliasLookup)
+                {
+                    var entry = kv.Value;
+                    var entryKey = string.IsNullOrWhiteSpace(entry.Group)
+                        ? entry.CommandName.ToLower()
+                        : $"{entry.Group.ToLower()}.{entry.CommandName.ToLower()}";
+
+                    if (entryKey == key)
+                    {
+                        aliases.Add(kv.Key.Split('.').Last());
+                    }
+                }
+
+                return aliases.OrderBy(a => a).ToList();
+            }
+
+            void AppendCommandLine(string name, IEnumerable<CommandEntry> entries)
+            {
+                var list = entries.Distinct().ToList();
+                var aliases = GetAliasesForKey(name);
+
+                string aliasText = aliases.Count > 0
+                    ? $" {Colorize("(aliases: " + string.Join(", ", aliases) + ")", Settings.Help_MutedColor)}"
+                    : "";
+
+                helpBuilder.AppendLine(
+                    $"{Colorize(name, Settings.Help_CommandColor)}{aliasText} " +
+                    $"{Colorize($"({list.Count} overload{(list.Count > 1 ? "s" : "")})", Settings.Help_MutedColor)}:"
+                );
+
+                foreach (var entry in list)
+                {
+                    if (entry.Flags.HasFlag(CommandFlags.Hidden))
+                        continue;
+
+                    var parameters = entry.MethodInfo.GetParameters();
+
+                    var visibleParams = parameters
+                        .Where(p => !IsInternalDelegate(p))
+                        .Select(FormatParameter);
+
+                    string args = string.Join(" ", visibleParams);
+
+                    helpBuilder.AppendLine(
+                        $"  {Colorize("", Settings.Help_CommandColor)} {args}"
+                    );
+
+                    helpBuilder.AppendLine(
+                        $"    {Colorize(entry.Description, Settings.Help_MutedColor)}"
+                    );
+                }
+
+                helpBuilder.AppendLine();
+            }
+
+            // =========================
+            // GLOBAL HELP
+            // =========================
             if (string.IsNullOrEmpty(commandName))
             {
-                helpBuilder.AppendLine("Available Commands:");
-                foreach (KeyValuePair<string, List<CommandEntry>> kv in ConsoleCommandRegistry.Commands.OrderBy(c => c.Key))
+                helpBuilder.AppendLine(Colorize("Available Commands:", Settings.Help_SectionColor));
+                helpBuilder.AppendLine();
+
+                foreach (var kv in ConsoleCommandRegistry.Commands.OrderBy(c => c.Key))
                 {
-                    var commandEntries = kv.Value.Distinct().ToList();
-                    helpBuilder.AppendLine($"- {kv.Key} ({commandEntries.Count} overload{(commandEntries.Count > 1 ? "s" : "")}):");
+                    if (ConsoleCommandRegistry.IsAlias(kv.Key, out _))
+                        continue;
 
-                    foreach (CommandEntry entry in commandEntries)
-                    {
-                        // Skip hidden commands in general help listing
-                        if (entry.Flags.HasFlag(CommandFlags.Hidden))
-                            continue;
-
-                        ParameterInfo[] parameters = entry.MethodInfo.GetParameters();
-
-                        string argsInfo = string.Join(" ", parameters
-                            .Where((p, index) => !(index == 0 &&
-                                (p.ParameterType == typeof(Action<string>) ||
-                                 p.ParameterType == typeof(Action<string, bool>) ||
-                                 p.ParameterType == typeof(CommandResponseDelegate))))
-                            .Select(p =>
-                                p.HasDefaultValue
-                                    ? $"<{p.Name} ({p.ParameterType.Name})={(p.DefaultValue is string s && s == string.Empty ? "\"\"" : p.DefaultValue)}>"
-                                    : $"<{p.Name} ({p.ParameterType.Name})>"));
-
-                        helpBuilder.AppendLine($"    {entry.CommandName} {argsInfo} - {entry.Description}");
-                    }
+                    AppendCommandLine(kv.Key, kv.Value);
                 }
+
+                return helpBuilder.ToString();
             }
-            else
+
+            // =========================
+            // SINGLE COMMAND HELP
+            // =========================
+            string cmdName = commandName.ToLower();
+
+            if (ConsoleCommandRegistry.IsAlias(cmdName, out var resolved))
             {
-                string cmdName = commandName.ToLower();
-                if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out List<CommandEntry> entryList))
+                if (resolved == null)
                 {
-                    var commandEntires = entryList.Distinct().ToList();
+                    helpBuilder.AppendLine(
+                        Colorize($"Unknown command: '{cmdName}'", Settings.WarningColor)
+                    );
 
-                    helpBuilder.AppendLine($"Command: {cmdName} ({commandEntires.Count} overload{(commandEntires.Count > 1 ? "s" : "")})");
-
-                    foreach (CommandEntry entry in commandEntires)
-                    {
-                        ParameterInfo[] parameters = entry.MethodInfo.GetParameters();
-
-                        string argsInfo = string.Join(" ", parameters
-                            .Where((p, index) => !(index == 0 &&
-                                (p.ParameterType == typeof(Action<string>) ||
-                                 p.ParameterType == typeof(Action<string, bool>) ||
-                                 p.ParameterType == typeof(CommandResponseDelegate))))
-                            .Select(p =>
-                                p.HasDefaultValue
-                                    ? $"<{p.Name} ({p.ParameterType.Name})={(p.DefaultValue is string s && s == string.Empty ? "\"\"" : p.DefaultValue)}>"
-                                    : $"<{p.Name} ({p.ParameterType.Name})>"));
-
-                        helpBuilder.AppendLine($"  Description: {entry.Description}");
-                        if (parameters.Length > 0) helpBuilder.AppendLine($"  Arguments: {argsInfo}");
-                        helpBuilder.AppendLine();
-                    }
+                    return helpBuilder.ToString();
                 }
-                else
+
+                cmdName = string.IsNullOrWhiteSpace(resolved.Group)
+                    ? resolved.CommandName.ToLower()
+                    : $"{resolved.Group.ToLower()}.{resolved.CommandName.ToLower()}";
+            }
+
+            if (!ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out List<CommandEntry> entryList))
+            {
+                helpBuilder.AppendLine(
+                    Colorize($"Unknown command: '{cmdName}'", Settings.WarningColor)
+                );
+
+                return helpBuilder.ToString();
+            }
+
+            var entriesSingle = entryList.Distinct().ToList();
+            var aliasesSingle = GetAliasesForKey(cmdName);
+
+            string aliasLine = aliasesSingle.Count > 0
+                ? $" {Colorize("(aliases: " + string.Join(", ", aliasesSingle) + ")", Settings.Help_MutedColor)}"
+                : "";
+
+            helpBuilder.AppendLine(
+                $"{Colorize("Command:", Settings.Help_SectionColor)} " +
+                $"{Colorize(cmdName, Settings.Help_CommandColor)}{aliasLine}"
+            );
+
+            helpBuilder.AppendLine(
+                Colorize($"({entriesSingle.Count} overload{(entriesSingle.Count > 1 ? "s" : "")})", Settings.Help_MutedColor)
+            );
+
+            helpBuilder.AppendLine();
+
+            foreach (var entry in entriesSingle)
+            {
+                if (entry.Flags.HasFlag(CommandFlags.Hidden))
+                    continue;
+
+                var parameters = entry.MethodInfo.GetParameters();
+
+                var visibleParams = parameters
+                    .Where(p => !IsInternalDelegate(p))
+                    .Select(FormatParameter);
+
+                string args = string.Join(" ", visibleParams);
+
+                helpBuilder.AppendLine(
+                    $"{Colorize("Description:", Settings.Help_MutedColor)} {entry.Description}"
+                );
+
+                if (visibleParams.Any())
                 {
-                    helpBuilder.AppendLine(Colorize($"Unknown command: '{cmdName}'", Settings.WarningColor));
+                    helpBuilder.AppendLine(
+                        $"{Colorize("Usage:", Settings.Help_MutedColor)} {entry.CommandName} {args}"
+                    );
                 }
+
+                helpBuilder.AppendLine();
             }
 
             return helpBuilder.ToString();
@@ -528,21 +734,21 @@ namespace NoSlimes.Util.UniTerminal
                         case 1 when providerParams[0].ParameterType == typeof(string):
                             return (IEnumerable<string>)providerMethod.Invoke(null, new object[] { prefix });
                         case 1 when providerParams[0].ParameterType == typeof(int):
-                            {
-                                var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, new object[] { relativeArgIndex });
-                                return (suggestions ?? Array.Empty<string>())
-                                    .Where(s => s.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0) 
-                                    .OrderByDescending(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) 
-                                    .ThenBy(s => s);
-                            }
+                        {
+                            var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, new object[] { relativeArgIndex });
+                            return (suggestions ?? Array.Empty<string>())
+                                .Where(s => s.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
+                                .OrderByDescending(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                                .ThenBy(s => s);
+                        }
                         case 0:
-                            {
-                                var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, null);
-                                return (suggestions ?? Array.Empty<string>())
-                                    .Where(s => s.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
-                                    .OrderByDescending(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                                    .ThenBy(s => s);
-                            }
+                        {
+                            var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, null);
+                            return (suggestions ?? Array.Empty<string>())
+                                .Where(s => s.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
+                                .OrderByDescending(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                                .ThenBy(s => s);
+                        }
                         default:
 #if DEBUG
                             LogHandler(Colorize($"AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).", Settings.WarningColor), false);
@@ -557,7 +763,7 @@ namespace NoSlimes.Util.UniTerminal
             if (paramType == typeof(bool))
                 return new[] { "true", "false" }
                     .Where(v => v.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
-                    .OrderByDescending(v => v.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)); 
+                    .OrderByDescending(v => v.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
             if (paramType.IsEnum)
             {
