@@ -11,44 +11,44 @@ namespace NoSlimes.Util.UniTerminal
 #if UNITERMINAL_BUILTIN
         #region Application
 
-        [ConsoleCommand("quit", "Quits the application.")]
+        [ConsoleCommand("quit", Description = "Quits the application.", Group = "application")]
         public static void QuitCommand(Action<string> response)
         {
             response("Quitting application...");
             Application.Quit();
         }
 
-        [ConsoleCommand("crash", "Crashes the application (for testing purposes).")]
+        [ConsoleCommand("crash", Description = "Crashes the application (for testing purposes).", Group = "application")]
         public static void CrashCommand(Action<string> response)
         {
             response("Crashing application...");
             UnityEngine.Diagnostics.Utils.ForceCrash(UnityEngine.Diagnostics.ForcedCrashCategory.Abort);
         }
 
-        [ConsoleCommand("version", "Prints the application version.")]
+        [ConsoleCommand("version", Description = "Prints the application version.", Group = "application")]
         public static void VersionCommand(Action<string> response) =>
             response($"Application version: {Application.version}");
 
-        [ConsoleCommand("platform", "Prints the current runtime platform.")]
+        [ConsoleCommand("platform", Description = "Prints the current runtime platform.", Group = "application")]
         public static void PlatformCommand(Action<string> response) =>
             response($"Running on: {Application.platform}");
 
-        [ConsoleCommand("dataPath", "Prints the data path of the application.")]
+        [ConsoleCommand("datapath", Description = "Prints the data path of the application.", Group = "application")]
         public static void DataPathCommand(Action<string> response) =>
             response($"Data path: {Application.dataPath}");
 
-        [ConsoleCommand("persistentDataPath", "Prints the persistent data path.")]
+        [ConsoleCommand("persistentdatapath", Description = "Prints the persistent data path.", Group = "application")]
         public static void PersistentDataPathCommand(Action<string> response) =>
             response($"Persistent data path: {Application.persistentDataPath}");
 
-        [ConsoleCommand("setTargetFPS", "Sets Application.targetFrameRate.")]
+        [ConsoleCommand("settargetfps", Description = "Sets Application.targetFrameRate.", Group = "application")]
         public static void SetTargetFPSCommand(Action<string> response, int fps)
         {
             Application.targetFrameRate = fps;
             response($"Target frame rate set to {fps}");
         }
 
-        [ConsoleCommand("uptime", "Prints the time since startup.")]
+        [ConsoleCommand("uptime", Description = "Prints the time since startup.", Group = "application")]
         public static void UptimeCommand(Action<string> response) =>
             response($"Uptime: {Time.realtimeSinceStartup:F2} seconds");
 
@@ -56,7 +56,7 @@ namespace NoSlimes.Util.UniTerminal
 
         #region Scene Management
 
-        [ConsoleCommand("reloadScene", "Reloads the current scene.")]
+        [ConsoleCommand("reloadscene", Description = "Reloads the current scene.", Group = "scene")]
         public static void ReloadSceneCommand(Action<string> response)
         {
             Scene scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
@@ -64,14 +64,14 @@ namespace NoSlimes.Util.UniTerminal
             UnityEngine.SceneManagement.SceneManager.LoadScene(scene.buildIndex);
         }
 
-        [ConsoleCommand("loadScene", "Loads a scene by name.")]
+        [ConsoleCommand("loadscene", Description = "Loads a scene by name.", Group = "scene")]
         public static void LoadSceneCommand(Action<string> response, string sceneName)
         {
             response($"Loading scene: {sceneName}");
             UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
         }
 
-        [ConsoleCommand("listScenes", "Lists all scenes in the build settings.")]
+        [ConsoleCommand("listscenes", Description = "Lists all scenes in the build settings.", Group = "scene")]
         public static void ListScenesCommand(Action<string> response)
         {
             IEnumerable<string> scenes = Enumerable
@@ -85,21 +85,21 @@ namespace NoSlimes.Util.UniTerminal
 
         #region Time & Physics
 
-        [ConsoleCommand("gravityScale", "Sets the global gravity scale.")]
+        [ConsoleCommand("gravityscale", Description = "Sets the global gravity scale.", Group = "physics")]
         public static void GravityScaleCommand(Action<string> response, float scale)
         {
             Physics.gravity = new Vector3(0, -9.81f * scale, 0);
             response($"Global gravity scale set to {scale}. New gravity: {Physics.gravity}");
         }
 
-        [ConsoleCommand("timeScale", "Sets the global time scale.")]
+        [ConsoleCommand("timescale", Description = "Sets the global time scale.", Group = "time")]
         public static void TimeScaleCommand(Action<string> response, float scale)
         {
             Time.timeScale = scale;
             response($"Global time scale set to {scale}.");
         }
 
-        [ConsoleCommand("fixedDeltaTime", "Sets Time.fixedDeltaTime.")]
+        [ConsoleCommand("fixeddeltatime", Description = "Sets Time.fixedDeltaTime.", Group = "time")]
         public static void FixedDeltaTimeCommand(Action<string> response, float seconds)
         {
             Time.fixedDeltaTime = seconds;
@@ -110,14 +110,14 @@ namespace NoSlimes.Util.UniTerminal
 
         #region Graphics & Quality
 
-        [ConsoleCommand("vsync", "Sets VSync count (0 = off, 1 = every vsync, 2 = every 2nd vsync).")]
+        [ConsoleCommand("vsync", Description = "Sets VSync count (0 = off, 1 = every vsync, 2 = every 2nd vsync).", Group = "graphics")]
         public static void VSyncCommand(Action<string> response, int count)
         {
             QualitySettings.vSyncCount = count;
             response($"VSync set to {count}");
         }
 
-        [ConsoleCommand("setQuality", "Sets the graphics quality level by index or name.")]
+        [ConsoleCommand("setquality", Description = "Sets the graphics quality level by index or name.", Group = "graphics")]
         public static void SetQualityCommand(Action<string> response, string quality)
         {
             if (int.TryParse(quality, out var index))
@@ -128,25 +128,25 @@ namespace NoSlimes.Util.UniTerminal
             response($"Graphics quality set to {QualitySettings.names[QualitySettings.GetQualityLevel()]}");
         }
 
-        [ConsoleCommand("listQuality", "Lists available graphics quality levels.")]
+        [ConsoleCommand("listquality", Description = "Lists available graphics quality levels.", Group = "graphics")]
         public static void ListQualityCommand(Action<string> response) =>
             response("Available quality levels: " + string.Join(", ", QualitySettings.names));
 
-        [ConsoleCommand("fullscreen", "Toggles fullscreen mode.")]
+        [ConsoleCommand("fullscreen", Description = "Toggles fullscreen mode.", Group = "graphics")]
         public static void FullscreenCommand(Action<string> response, bool enabled)
         {
             Screen.fullScreen = enabled;
             response($"Fullscreen set to {enabled}");
         }
 
-        [ConsoleCommand("resolutions", "Lists supported screen resolutions.")]
+        [ConsoleCommand("resolutions", Description = "Lists supported screen resolutions.", Group = "graphics")]
         public static void ResolutionsCommand(Action<string> response)
         {
             IEnumerable<string> resolutions = Screen.resolutions.Select(r => $"{r.width}x{r.height}@{r.refreshRateRatio}Hz");
             response("Supported resolutions:\n" + string.Join("\n", resolutions));
         }
 
-        [ConsoleCommand("setResolution", "Sets the screen resolution (width, height, fullscreen).")]
+        [ConsoleCommand("setresolution", Description = "Sets the screen resolution (width, height, fullscreen).", Group = "graphics")]
         public static void SetResolutionCommand(Action<string> response, int width, int height, bool fullscreen)
         {
             Screen.SetResolution(width, height, fullscreen);
@@ -157,7 +157,7 @@ namespace NoSlimes.Util.UniTerminal
 
         #region Camera & Debug
 
-        [ConsoleCommand("setFOV", "Sets the main camera's field of view.")]
+        [ConsoleCommand("setfov", Description = "Sets the main camera's field of view.", Group = "camera")]
         public static void SetFOVCommand(Action<string> response, float fov)
         {
             if (Camera.main != null)
@@ -168,7 +168,7 @@ namespace NoSlimes.Util.UniTerminal
             else response("<color=yellow>No main camera found.</color>");
         }
 
-        [ConsoleCommand("screenshot", "Takes a screenshot and saves it.")]
+        [ConsoleCommand("screenshot", Description = "Takes a screenshot and saves it.", Group = "debug")]
         public static void ScreenshotCommand(Action<string> response, string filename = "screenshot.png")
         {
             ScreenCapture.CaptureScreenshot(filename);
@@ -179,7 +179,7 @@ namespace NoSlimes.Util.UniTerminal
 
         #region System Information
 
-        [ConsoleCommand("systemInfo", "Prints system information (GPU, CPU, RAM).")]
+        [ConsoleCommand("systeminfo", Description = "Prints system information (GPU, CPU, RAM).", Group = "system")]
         public static void SystemInfoCommand(Action<string> response)
         {
             response($"Device: {SystemInfo.deviceName} ({SystemInfo.deviceModel})");
@@ -193,28 +193,28 @@ namespace NoSlimes.Util.UniTerminal
 
         #region PlayerPrefs
 
-        [ConsoleCommand("setPref", "Sets a PlayerPref (string).")]
+        [ConsoleCommand("set", Description = "Sets a PlayerPref string value.", Group = "prefs")]
         public static void SetPrefCommand(Action<string> response, string key, string value)
         {
             PlayerPrefs.SetString(key, value);
             response($"PlayerPref set: {key} = {value}");
         }
 
-        [ConsoleCommand("getPref", "Gets a PlayerPref (string).")]
+        [ConsoleCommand("get", Description = "Gets a PlayerPref string value.", Group = "prefs")]
         public static void GetPrefCommand(Action<string> response, string key)
         {
             string value = PlayerPrefs.GetString(key, "(not found)");
             response($"PlayerPref: {key} = {value}");
         }
 
-        [ConsoleCommand("delPref", "Deletes a PlayerPref key.")]
+        [ConsoleCommand("delete", Description = "Deletes a PlayerPref key.", Group = "prefs")]
         public static void DeletePrefCommand(Action<string> response, string key)
         {
             PlayerPrefs.DeleteKey(key);
             response($"Deleted PlayerPref: {key}");
         }
 
-        [ConsoleCommand("clearPrefs", "Clears all PlayerPrefs.")]
+        [ConsoleCommand("clear", Description = "Clears all PlayerPrefs.", Group = "prefs")]
         public static void ClearPrefsCommand(Action<string> response)
         {
             PlayerPrefs.DeleteAll();
@@ -225,7 +225,7 @@ namespace NoSlimes.Util.UniTerminal
 #endif
 
 #if UNITERMINAL_ENABLECHEATS
-        [ConsoleCommand("enableCheats", "Enables cheat commands.")]
+        [ConsoleCommand("enablecheats", Description = "Enables cheat commands.")]
         private static void EnableCheatsCommand(Action<string> response, bool enable = true)
         {
             ConsoleCommandInvoker.CheatsEnabled = enable;
