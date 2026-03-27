@@ -46,10 +46,14 @@ namespace NoSlimes.Util.UniTerminal
 
         private static void AfterAssemblyReload()
         {
-            if (UniTerminalSettings.instance != null && UniTerminalSettings.instance.IsAutoRebuildEnabled && EditorApplication.isPlaying)
+            static void callback()
             {
-                EditorApplication.delayCall += () => DiscoverCommandsEditor();
+                DiscoverCommandsEditor();
+                EditorApplication.delayCall -= callback;
             }
+
+            if (UniTerminalSettings.instance.IsAutoRebuildEnabled && !EditorApplication.isPlayingOrWillChangePlaymode)
+                EditorApplication.delayCall += callback;
         }
 
         [MenuItem("Tools/UniTerminal/Manual Build Command Cache")]
