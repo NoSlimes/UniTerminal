@@ -169,104 +169,55 @@ UniTerminal supports tab-based auto-completion for both command names and argume
 
 #### Custom Argument Suggestions
 
-You can provide dynamic suggestions for your string arguments (e.g., Item IDs, Entity Names) by referencing a static method in the `[ConsoleCommand]` attribute.
+Suggestions are configured **per parameter** with attributes. On Tab, UniTerminal tries them in order: `[SuggestValues]` / `[Suggest]` → code-registered providers (below) → built-in `bool` / `enum` handling. Providers return candidates; UniTerminal filters and sorts them by your input, so every signature behaves the same.
 
-**How to register:**
-1.  Create a `static` method in the same class that returns `IEnumerable<string>` or `string[]`.
-2.  Pass the method's name to the `AutoCompleteProvider` property in the attribute.
+| Attribute | Use |
+| :--- | :--- |
+| `[SuggestValues("a", "b")]` | Fixed list. Works on any parameter type. |
+| `[Suggest(nameof(MyMethod))]` | Static method in the same class: `()` or `(AutoCompleteContext)`, returning `IEnumerable<string>`. |
+| `[Suggest(typeof(Shared), nameof(Shared.Method))]` | Same, but shared across classes via a compile-time type reference. |
 
-**Supported Method Signatures:**
-UniTerminal automatically detects the parameters of your provider method. You can choose the signature that best fits your complexity needs:
-
-| Signature | Who Filters? | Description |
-| :--- | :--- | :--- |
-| `()` | **System** | Returns the same list for *every* argument. Best used for commands with **only one** parameter. |
-| `(int index)` | **System** | Returns options specific to the argument index being typed. Best for multi-parameter commands. |
-| `(string prefix)` | **You** | You receive the current input. You must filter and return only matches. |
-| `(string prefix, int index)` | **You** | You receive input and argument index. You must filter and return matches. |
-
-> **Important: Index & Callbacks**
-> The `index` parameter represents the argument index **as typed by the user in the console**.
-> If your command method requests an `Action<string>` or `Action<string, bool>` for responses, **this parameter is ignored** for indexing. The first argument typed by the user is always `index 0`.
+`AutoCompleteContext` carries `Prefix`, `ArgIndex` (as typed by the user — a leading `Action<string>` response callback is skipped), `ParamName`, and `TypedArgs`.
 
 ---
 
 #### Examples
 
-**1. Simple List `()`**
-*Best for: Commands with a **single parameter**.*
-Since this signature doesn't receive the argument index, it will return the same suggestions for every argument.
-
+**1. Fixed list**
 ```csharp
-[ConsoleCommand("spawn", "Spawns an entity.", AutoCompleteProvider = nameof(GetEntityNames))]
-public static void SpawnCommand(string entityName) { ... }
+[ConsoleCommand("coins", Description = "Grants coins.")]
+public static void CoinsCommand(Action<string, bool> response, [SuggestValues("50", "250", "1000", "5000")] int amount = 250)
+{ ... }
+```
 
-// System handles filtering (StartsWith)
-private static IEnumerable<string> GetEntityNames()
+**2. Shared provider**
+```csharp
+[ConsoleCommand("give", Description = "Give item.")]
+public static void GiveCommand(Action<string> reply,
+    [Suggest(typeof(Players), nameof(Players.Suggest))] string target,
+    [SuggestValues("Sword", "Shield")] string item)
+{ ... }
+
+static class Players
 {
-    return new[] { "Slime", "Goblin", "Dragon", "Skeleton" };
+    public static IEnumerable<string> Suggest(AutoCompleteContext ctx) => AllPlayers;
 }
 ```
 
-**2. Index Aware `(int index)`**
-*Best for: Commands with **multiple arguments** where you want the system to handle filtering.*
-*Note how `statName` is index 0, even though the C# method has an `Action` as the first parameter.*
+#### Code-registered providers (lambdas)
+
+Attributes can't hold lambdas, so functions closing over live game data are registered at startup:
 
 ```csharp
-[ConsoleCommand("set_stat", "Sets a stat.", AutoCompleteProvider = nameof(StatSuggestions))]
-public static void SetStatCommand(Action<string> reply, string statName, string mode) { ... }
-
-// 'index' is 0 for 'statName', 1 for 'mode' (The Action parameter is skipped)
-private static IEnumerable<string> StatSuggestions(int index)
-{
-    return index switch
-    {
-        0 => new[] { "Health", "Mana", "Stamina" },
-        1 => new[] { "Set", "Add", "Subtract" },
-        _ => Array.Empty<string>()
-    };
-}
+UniTerminal.RegisterSuggestions<FoodId>(ctx => FoodDb.AllNames); // every FoodId param
+UniTerminal.RegisterSuggestions("give", "item", ctx => ItemDb.FindMatches(ctx.Prefix)); // one param
 ```
 
-**3. Manual Filtering `(string prefix)`**
-*Best for: Custom matching logic (e.g., 'Contains' instead of 'StartsWith') or specific optimization.*
+Unregister with `UnregisterSuggestions<T>()` / `UnregisterSuggestions(command, param)`, or wipe with `ClearRegisteredSuggestions()`.
 
-```csharp
-[ConsoleCommand("search_part", "Find part.", AutoCompleteProvider = nameof(SearchParts))]
-public static void SearchCommand(string query) { ... }
+#### Legacy providers (obsolete)
 
-// You must filter the results yourself using 'prefix'
-private static IEnumerable<string> SearchParts(string prefix)
-{
-    // Example: Using 'Contains' allows finding "Engine_Piston" by typing "Piston"
-    return PartDatabase.AllParts
-        .Where(p => p.Contains(prefix, StringComparison.OrdinalIgnoreCase)); 
-}
-```
-
-**4. Full Control `(string prefix, int index)`**
-*Best for: Complex commands with multiple arguments requiring custom logic per argument.*
-
-```csharp
-[ConsoleCommand("give", "Give item.", AutoCompleteProvider = nameof(GiveSuggestions))]
-public static void GiveCommand(Action<string> reply, string target, string itemId) { ... }
-
-private static IEnumerable<string> GiveSuggestions(string prefix, int index)
-{
-    // Index 0 = 'target', Index 1 = 'itemId' (Action is skipped)
-    if (index == 0) 
-    {
-        // Custom logic for Target
-        return new[] { "Player", "Enemy" }.Where(x => x.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-    }
-    else if (index == 1) 
-    {
-        // Custom logic for ItemId (e.g. database lookup)
-        return ItemDatabase.FindMatches(prefix);
-    }
-    return Array.Empty<string>();
-}
-```
+`AutoCompleteProvider = nameof(Method)` on `[ConsoleCommand]` still works: one static provider per command with `( )/int/string/string+int` signatures, where the `string` variants must filter themselves and multi-arg commands switch on `index`. Migrate to per-parameter attributes when you touch those commands.
 
 *Note: If a suggestion contains spaces (e.g., `"Big Slime"`), UniTerminal will automatically wrap it in quotes when selected.*
 
@@ -314,7 +265,7 @@ These settings only affect the Unity Editor environment and are saved in `Editor
 | **Detailed Logging** | If enabled, UniTerminal will log a **change report** to the Unity Console after a cache rebuild, detailing exactly which commands were **Added**, **Removed**, or **Modified**. Useful for verifying that your code changes were detected correctly. |
 
 #### Manual Actions
-*   **Manual Rebuild Command Cache:** Forces a full reflection scan of your assemblies and rebuilds the command database. Use this if the console isn't picking up a new `[ConsoleCommand]` attribute immediately.
+*   **Manual Rebuild Command Cache:** Forces a rebuild via Unity's indexed `TypeCache` and rewrites the command database. Use this if the console isn't picking up a new `[ConsoleCommand]` attribute immediately.
 
 ---
 

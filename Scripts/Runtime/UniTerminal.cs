@@ -51,6 +51,14 @@ namespace NoSlimes.Util.UniTerminal
         /// <param name="converter">A function that takes a string and returns an instance of T.</param>
         public static void RegisterArgConverter<T>(Func<string, T> converter) => ConsoleCommandInvoker.RegisterArgConverter(converter);
 
+        public static void RegisterSuggestions<T>(Func<AutoCompleteContext, System.Collections.Generic.IEnumerable<string>> provider) => ConsoleCommandInvoker.RegisterSuggestions<T>(provider);
+
+        public static bool UnregisterSuggestions<T>() => ConsoleCommandInvoker.UnregisterSuggestions<T>();
+
+        public static void RegisterSuggestions(string command, string paramName, Func<AutoCompleteContext, System.Collections.Generic.IEnumerable<string>> provider) => ConsoleCommandInvoker.RegisterSuggestions(command, paramName, provider);
+
+        public static bool UnregisterSuggestions(string command, string paramName) => ConsoleCommandInvoker.UnregisterSuggestions(command, paramName);
+
         /// <summary>
         /// Executes a raw command string (including arguments) as if it were typed into the console.
         /// <para>Example: <c>UniTerminal.ExecuteCommand("spawn_item sword 5");</c></para>

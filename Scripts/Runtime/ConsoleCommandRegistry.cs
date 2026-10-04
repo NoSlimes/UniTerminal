@@ -57,13 +57,14 @@ namespace NoSlimes.Util.UniTerminal
         }
 
         [MenuItem("Tools/UniTerminal/Manual Build Command Cache")]
-        internal static async void DiscoverCommandsEditor()
+        internal static void DiscoverCommandsEditor()
         {
             int taskId = Progress.Start("UniTerminal", "Building Command Cache...");
             try
             {
-                await DiscoverCommandsAsync(
-                    AppDomain.CurrentDomain.GetAssemblies(),
+                // Editor: TypeCache is indexed at compile time, so this is
+                // O(commands) instead of O(all methods in all assemblies).
+                DiscoverCommandsWithTypeCache(
                     true,
                     (progress, message) => Progress.Report(taskId, progress, message)
                 );
@@ -72,6 +73,33 @@ namespace NoSlimes.Util.UniTerminal
             {
                 Progress.Finish(taskId);
             }
+        }
+
+        /// Editor-only TypeCache fast path. Runtime mods must use reflection.
+        /// <see cref="DiscoverCommands"/> covers builds and dynamic assemblies.
+        internal static void DiscoverCommandsWithTypeCache(bool overwrite = true, Action<float, string> onProgress = null)
+        {
+            if (overwrite)
+            {
+                _commands.Clear();
+                _commandsByGroup.Clear();
+                _aliasLookup.Clear();
+            }
+
+            onProgress?.Invoke(0f, "Querying TypeCache...");
+            var methods = TypeCache.GetMethodsWithAttribute<ConsoleCommandAttribute>();
+
+            var validCommands = new List<CommandEntry>(methods.Count);
+            for (int i = 0; i < methods.Count; i++)
+            {
+                var entry = CreateCommandEntry(methods[i]);
+                if (entry == null) continue;
+                validCommands.Add(entry);
+                RegisterEntryInDictionary(entry);
+            }
+
+            onProgress?.Invoke(0.99f, "Saving to Disk...");
+            UpdateCacheEditor(validCommands);
         }
 #endif
 
@@ -137,15 +165,139 @@ namespace NoSlimes.Util.UniTerminal
                 : $"{group.ToLowerInvariant()}.{name.ToLowerInvariant()}";
         }
 
-        internal static void DiscoverCommands(IEnumerable<Assembly> assemblies = null, bool overwrite = true)
+        private static CommandEntry CreateCommandEntry(MethodInfo method)
+        {
+            if (method == null) return null;
+
+            var attr = method.GetCustomAttribute<ConsoleCommandAttribute>();
+            if (attr == null) return null;
+
+            var type = method.DeclaringType;
+            if (type == null) return null;
+            if (!method.IsStatic && !type.IsSubclassOf(typeof(UnityEngine.Object))) return null;
+
+            var paramInfos = method.GetParameters();
+            var suggests = new ParamSuggest[paramInfos.Length];
+            for (int i = 0; i < paramInfos.Length; i++)
+            {
+                var valuesAttr = paramInfos[i].GetCustomAttribute<SuggestValuesAttribute>();
+                if (valuesAttr != null)
+                {
+                    suggests[i] = new ParamSuggest { Values = (string[])valuesAttr.Values.Clone() };
+                    continue;
+                }
+
+                var suggestAttr = paramInfos[i].GetCustomAttribute<SuggestAttribute>();
+                if (suggestAttr != null)
+                {
+                    suggests[i] = new ParamSuggest
+                    {
+                        ProviderTypeName = suggestAttr.ProviderType != null ? suggestAttr.ProviderType.AssemblyQualifiedName : null,
+                        ProviderMethod = suggestAttr.ProviderMethod
+                    };
+                }
+            }
+
+            var entry = new CommandEntry
+            {
+                CommandName = attr.Name,
+                Group = attr.Group,
+                Description = attr.Description,
+                Flags = attr.Flags,
+#pragma warning disable 618
+                AutoCompleteProvider = attr.AutoCompleteProvider,
+#pragma warning restore 618
+                Aliases = method.GetCustomAttributes<CommandAliasAttribute>().Select(a => a.Alias).ToArray(),
+                DeclaringTypeName = type.AssemblyQualifiedName,
+                MethodName = method.Name,
+                ParameterTypes = paramInfos.Select(p => p.ParameterType.AssemblyQualifiedName).ToArray(),
+                ParamSuggests = suggests,
+                MethodInfo = method,
+                IsStatic = method.IsStatic,
+                DeclaringType = type
+            };
+            EnsureSuggestResolvers(entry, null);
+            return entry;
+        }
+
+        private static readonly Dictionary<string, MethodInfo> providerMethodCache = new(StringComparer.Ordinal);
+
+        internal static void EnsureSuggestResolvers(CommandEntry entry, Dictionary<string, Type> typeCache)
+        {
+            if (entry?.ParamSuggests == null)
+                return;
+            if (entry.SuggestResolvers != null && entry.SuggestResolvers.Length == entry.ParamSuggests.Length)
+                return;
+
+            var resolvers = new Func<AutoCompleteContext, IEnumerable<string>>[entry.ParamSuggests.Length];
+            for (int i = 0; i < entry.ParamSuggests.Length; i++)
+            {
+                var suggest = entry.ParamSuggests[i];
+                if (IsEmptySuggest(suggest))
+                    continue;
+
+                if (suggest.Values != null && suggest.Values.Length > 0)
+                {
+                    string[] copy = (string[])suggest.Values.Clone();
+                    resolvers[i] = _ => copy;
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(suggest.ProviderMethod))
+                    continue;
+
+                Type providerType = string.IsNullOrEmpty(suggest.ProviderTypeName)
+                    ? entry.DeclaringType
+                    : ResolveType(suggest.ProviderTypeName, typeCache);
+                if (providerType == null)
+                    continue;
+
+                string cacheKey = providerType.AssemblyQualifiedName + "::" + suggest.ProviderMethod;
+                if (!providerMethodCache.TryGetValue(cacheKey, out var provider))
+                {
+                    provider = providerType.GetMethod(suggest.ProviderMethod,
+                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (provider == null || !typeof(System.Collections.IEnumerable).IsAssignableFrom(provider.ReturnType))
+                    {
+                        providerMethodCache[cacheKey] = null;
+                        continue;
+                    }
+                    var providerParams = provider.GetParameters();
+                    bool valid = providerParams.Length == 0
+                        || (providerParams.Length == 1 && providerParams[0].ParameterType == typeof(AutoCompleteContext));
+                    if (!valid)
+                    {
+                        providerMethodCache[cacheKey] = null;
+                        continue;
+                    }
+                    providerMethodCache[cacheKey] = provider;
+                }
+
+                if (provider == null)
+                    continue;
+
+                var captured = provider;
+                var capturedParams = captured.GetParameters();
+                if (capturedParams.Length == 0)
+                    resolvers[i] = _ => (IEnumerable<string>)captured.Invoke(null, null);
+                else
+                    resolvers[i] = ctx => (IEnumerable<string>)captured.Invoke(null, new object[] { ctx });
+            }
+            entry.SuggestResolvers = resolvers;
+        }
+
+        internal static void DiscoverCommands(IEnumerable<Assembly> assemblies = null, bool overwrite = true, bool applyFilter = true)
         {
             if (overwrite)
             {
                 _commands.Clear();
+                _commandsByGroup.Clear();
                 _aliasLookup.Clear();
             }
 
             assemblies ??= AppDomain.CurrentDomain.GetAssemblies();
+            if (applyFilter)
+                assemblies = GetScannableAssemblies(assemblies);
             var validCommands = new List<CommandEntry>();
 
             foreach (var assembly in assemblies)
@@ -154,27 +306,8 @@ namespace NoSlimes.Util.UniTerminal
                 {
                     foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
                     {
-                        var attr = method.GetCustomAttribute<ConsoleCommandAttribute>();
-                        if (attr == null) continue;
-                        if (!method.IsStatic && !type.IsSubclassOf(typeof(UnityEngine.Object))) continue;
-
-                        var aliasAttrs = method.GetCustomAttributes<CommandAliasAttribute>();
-
-                        var entry = new CommandEntry
-                        {
-                            CommandName = attr.Name,
-                            Group = attr.Group,
-                            Description = attr.Description,
-                            Flags = attr.Flags,
-                            AutoCompleteProvider = attr.AutoCompleteProvider,
-                            Aliases = aliasAttrs.Select(a => a.Alias).ToArray(),
-                            DeclaringTypeName = type.AssemblyQualifiedName,
-                            MethodName = method.Name,
-                            ParameterTypes = method.GetParameters().Select(p => p.ParameterType.AssemblyQualifiedName).ToArray(),
-                            MethodInfo = method,
-                            IsStatic = method.IsStatic,
-                            DeclaringType = type
-                        };
+                        var entry = CreateCommandEntry(method);
+                        if (entry == null) continue;
 
                         validCommands.Add(entry);
                         RegisterEntryInDictionary(entry);
@@ -187,9 +320,12 @@ namespace NoSlimes.Util.UniTerminal
 #endif
         }
 
+        // Runtime/reflection fallback for explicit assembly scans and mods.
+        // Editor full rebuilds should use DiscoverCommandsWithTypeCache instead.
+
         internal static async Task DiscoverCommandsAsync(IEnumerable<Assembly> assemblies = null, bool overwrite = true, Action<float, string> onProgress = null)
         {
-            var assemblyList = (assemblies ?? AppDomain.CurrentDomain.GetAssemblies()).ToArray();
+            var assemblyList = GetScannableAssemblies(assemblies ?? AppDomain.CurrentDomain.GetAssemblies()).ToArray();
             int total = assemblyList.Length;
 
             var results = await Task.Run(() =>
@@ -206,28 +342,8 @@ namespace NoSlimes.Util.UniTerminal
                     {
                         foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
                         {
-                            var attr = method.GetCustomAttribute<ConsoleCommandAttribute>();
-                            if (attr == null) continue;
-                            if (!method.IsStatic && !type.IsSubclassOf(typeof(UnityEngine.Object))) continue;
-
-                            var aliasAttrs = method.GetCustomAttributes<CommandAliasAttribute>();
-
-                            var entry = new CommandEntry
-                            {
-                                CommandName = attr.Name,
-                                Group = attr.Group,
-                                Description = attr.Description,
-                                Flags = attr.Flags,
-                                AutoCompleteProvider = attr.AutoCompleteProvider,
-                                Aliases = aliasAttrs.Select(a => a.Alias).ToArray(),
-                                DeclaringTypeName = type.AssemblyQualifiedName,
-                                MethodName = method.Name,
-                                ParameterTypes = method.GetParameters().Select(p => p.ParameterType.AssemblyQualifiedName).ToArray(),
-                                MethodInfo = method,
-                                IsStatic = method.IsStatic,
-                                DeclaringType = type
-                            };
-
+                            var entry = CreateCommandEntry(method);
+                            if (entry == null) continue;
                             valid.Add(entry);
                         }
                     }
@@ -239,6 +355,7 @@ namespace NoSlimes.Util.UniTerminal
             if (overwrite)
             {
                 _commands.Clear();
+                _commandsByGroup.Clear();
                 _aliasLookup.Clear();
             }
 
@@ -256,28 +373,152 @@ namespace NoSlimes.Util.UniTerminal
         }
 
 #if UNITY_EDITOR
+        private const string CacheAssetPath = "Assets/Resources/UniTerminal/UniTerminalCommandCache.asset";
+
         private static void UpdateCacheEditor(List<CommandEntry> entries)
         {
-            cache = Resources.Load<ConsoleCommandCache>("UniTerminal/UniTerminalCommandCache");
+            entries.Sort((a, b) => string.CompareOrdinal(EntryIdentity(a), EntryIdentity(b)));
+            ValidateAutoCompleteProviders(entries);
+
+            cache = AssetDatabase.LoadAssetAtPath<ConsoleCommandCache>(CacheAssetPath);
             if (cache == null)
             {
-                string folderPath = "Assets/Resources/UniTerminal";
+                const string folderPath = "Assets/Resources/UniTerminal";
                 if (!AssetDatabase.IsValidFolder("Assets/Resources"))
                     AssetDatabase.CreateFolder("Assets", "Resources");
                 if (!AssetDatabase.IsValidFolder(folderPath))
                     AssetDatabase.CreateFolder("Assets/Resources", "UniTerminal");
 
                 cache = ScriptableObject.CreateInstance<ConsoleCommandCache>();
-                AssetDatabase.CreateAsset(cache, folderPath + "/UniTerminalCommandCache.asset");
+                AssetDatabase.CreateAsset(cache, CacheAssetPath);
             }
 
-            cache.Commands = entries.ToArray();
+            var oldEntries = cache.Commands ?? Array.Empty<CommandEntry>();
+            if (CommandsEqual(oldEntries, entries))
+                return;
 
+            bool detailed = UniTerminalSettings.instance != null && UniTerminalSettings.instance.IsDetailedLoggingEnabled;
+            if (detailed)
+                LogCommandDiff(oldEntries, entries);
+            else
+                Debug.Log($"[UniTerminal] Built command cache with {entries.Count} entries.");
+
+            cache.Commands = entries.ToArray();
             EditorUtility.SetDirty(cache);
             AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
+        }
 
-            Debug.Log($"[UniTerminal] Built command cache with {cache.Commands.Length} entries.");
+        private static string EntryIdentity(CommandEntry e)
+        {
+            string paramKey = e.ParameterTypes != null ? string.Join(",", e.ParameterTypes) : string.Empty;
+            return $"{e.DeclaringTypeName}::{e.MethodName}({paramKey})";
+        }
+
+        private static bool EntryPayloadEqual(CommandEntry a, CommandEntry b)
+        {
+            if (a.CommandName != b.CommandName
+                || a.Group != b.Group
+                || a.Description != b.Description
+                || a.Flags != b.Flags
+#pragma warning disable 618
+                || a.AutoCompleteProvider != b.AutoCompleteProvider
+#pragma warning restore 618
+                || a.DeclaringTypeName != b.DeclaringTypeName
+                || a.MethodName != b.MethodName
+                || !(a.Aliases ?? Array.Empty<string>()).SequenceEqual(b.Aliases ?? Array.Empty<string>())
+                || !(a.ParameterTypes ?? Array.Empty<string>()).SequenceEqual(b.ParameterTypes ?? Array.Empty<string>()))
+                return false;
+
+            var sa = a.ParamSuggests ?? Array.Empty<ParamSuggest>();
+            var sb = b.ParamSuggests ?? Array.Empty<ParamSuggest>();
+            if (sa.Length != sb.Length)
+                return false;
+            for (int i = 0; i < sa.Length; i++)
+            {
+                if (!SuggestEqual(sa[i], sb[i]))
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool CommandsEqual(IReadOnlyList<CommandEntry> a, IReadOnlyList<CommandEntry> b)
+        {
+            if (a.Count != b.Count)
+                return false;
+            var sortedA = a.OrderBy(EntryIdentity).ToArray();
+            var sortedB = b.OrderBy(EntryIdentity).ToArray();
+            for (int i = 0; i < sortedA.Length; i++)
+            {
+                if (EntryIdentity(sortedA[i]) != EntryIdentity(sortedB[i]) || !EntryPayloadEqual(sortedA[i], sortedB[i]))
+                    return false;
+            }
+            return true;
+        }
+
+        private static void LogCommandDiff(IReadOnlyList<CommandEntry> oldEntries, IReadOnlyList<CommandEntry> newEntries)
+        {
+            var oldById = oldEntries.ToDictionary(EntryIdentity, e => e);
+            var newById = newEntries.ToDictionary(EntryIdentity, e => e);
+            var added = newById.Keys.Except(oldById.Keys).ToArray();
+            var removed = oldById.Keys.Except(newById.Keys).ToArray();
+            var modified = newById.Keys.Intersect(oldById.Keys).Where(id => !EntryPayloadEqual(oldById[id], newById[id])).ToArray();
+            Debug.Log($"[UniTerminal] Cache: +{added.Length} -{removed.Length} ~{modified.Length} ({newEntries.Count} total).");
+            foreach (var id in added) Debug.Log($"[UniTerminal] Added: {newById[id].Group}.{newById[id].CommandName} ({id})");
+            foreach (var id in removed) Debug.Log($"[UniTerminal] Removed: {oldById[id].Group}.{oldById[id].CommandName} ({id})");
+            foreach (var id in modified) Debug.Log($"[UniTerminal] Modified: {newById[id].Group}.{newById[id].CommandName} ({id})");
+        }
+
+        private static void ValidateAutoCompleteProviders(List<CommandEntry> entries)
+        {
+            foreach (var entry in entries)
+            {
+#pragma warning disable 618
+                string obsolete = entry.AutoCompleteProvider;
+#pragma warning restore 618
+                if (!string.IsNullOrEmpty(obsolete))
+                {
+                    var type = entry.DeclaringType;
+                    var provider = type?.GetMethod(obsolete,
+                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (provider == null || !typeof(System.Collections.IEnumerable).IsAssignableFrom(provider.ReturnType))
+                        Debug.LogWarning($"[UniTerminal] '{entry.CommandName}' obsolete provider '{obsolete}' not found on {type?.Name}. Use [Suggest]/[SuggestValues].");
+                }
+
+                if (entry.ParamSuggests == null)
+                    continue;
+                for (int i = 0; i < entry.ParamSuggests.Length; i++)
+                {
+                    var suggest = entry.ParamSuggests[i];
+                    if (suggest == null)
+                        continue;
+                    if (suggest.Values != null)
+                    {
+                        if (suggest.Values.Length == 0)
+                            Debug.LogError($"[UniTerminal] '{entry.CommandName}' param {i}: [SuggestValues] is empty.");
+                        continue;
+                    }
+                    Type providerType = string.IsNullOrEmpty(suggest.ProviderTypeName)
+                        ? entry.DeclaringType
+                        : Type.GetType(suggest.ProviderTypeName, false);
+                    if (providerType == null)
+                    {
+                        Debug.LogError($"[UniTerminal] '{entry.CommandName}' param {i}: provider type '{suggest.ProviderTypeName}' not found.");
+                        continue;
+                    }
+                    var method = providerType.GetMethod(suggest.ProviderMethod,
+                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (method == null || !typeof(System.Collections.IEnumerable).IsAssignableFrom(method.ReturnType))
+                    {
+                        Debug.LogError($"[UniTerminal] '{entry.CommandName}' param {i}: provider '{suggest.ProviderMethod}' not found on {providerType.Name}.");
+                        continue;
+                    }
+                    var ps = method.GetParameters();
+                    bool valid = ps.Length == 0
+                        || (ps.Length == 1 && ps[0].ParameterType == typeof(AutoCompleteContext));
+                    if (!valid)
+                        Debug.LogError($"[UniTerminal] '{entry.CommandName}' param {i}: provider '{suggest.ProviderMethod}' must be () or (AutoCompleteContext).");
+                }
+            }
         }
 #endif
 
@@ -285,7 +526,7 @@ namespace NoSlimes.Util.UniTerminal
         {
             if (assembly == null) throw new ArgumentNullException(nameof(assembly));
             if (!runtimeAssemblies.Contains(assembly)) runtimeAssemblies.Add(assembly);
-            DiscoverCommands(new[] { assembly }, false);
+            DiscoverCommands(new[] { assembly }, false, false);
         }
 
         public static void LoadCache()
@@ -303,13 +544,24 @@ namespace NoSlimes.Util.UniTerminal
             _commandsByGroup.Clear();
             _aliasLookup.Clear();
 
+            var typeCache = new Dictionary<string, Type>(StringComparer.Ordinal);
             foreach (var entry in cache.Commands)
             {
-                var type = Type.GetType(entry.DeclaringTypeName);
+                if (entry == null)
+                    continue;
+
+                var type = ResolveType(entry.DeclaringTypeName, typeCache);
                 if (type == null) continue;
 
-                var paramTypes = entry.ParameterTypes.Select(Type.GetType).ToArray();
-                if (paramTypes.Any(t => t == null)) continue;
+                var paramNames = entry.ParameterTypes ?? Array.Empty<string>();
+                var paramTypes = new Type[paramNames.Length];
+                bool failed = false;
+                for (int i = 0; i < paramNames.Length; i++)
+                {
+                    paramTypes[i] = ResolveType(paramNames[i], typeCache);
+                    if (paramTypes[i] == null) { failed = true; break; }
+                }
+                if (failed) continue;
 
                 var method = type.GetMethod(entry.MethodName,
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance,
@@ -321,6 +573,7 @@ namespace NoSlimes.Util.UniTerminal
                 entry.MethodInfo = method;
                 entry.IsStatic = method.IsStatic;
                 entry.DeclaringType = type;
+                EnsureSuggestResolvers(entry, typeCache);
 
                 if (method.IsStatic)
                 {
@@ -336,7 +589,7 @@ namespace NoSlimes.Util.UniTerminal
 
             if (runtimeAssemblies.Count > 0)
             {
-                DiscoverCommands(runtimeAssemblies, false);
+                DiscoverCommands(runtimeAssemblies, false, false);
             }
 
             stopwatch.Stop();
@@ -353,6 +606,120 @@ namespace NoSlimes.Util.UniTerminal
             {
                 return e.Types.Where(t => t != null);
             }
+        }
+
+        private static readonly string UniTerminalAssemblyName =
+            typeof(ConsoleCommandAttribute).Assembly.GetName().Name;
+
+        private static bool ShouldScanAssembly(Assembly assembly)
+        {
+            if (assembly == null || assembly.IsDynamic)
+                return false;
+
+            // The assembly that defines [ConsoleCommand] always gets scanned.
+            if (assembly == typeof(ConsoleCommandAttribute).Assembly)
+                return true;
+
+            string name = assembly.GetName().Name;
+
+            // Fast path: these can never contain commands, don't even
+            // pay for GetReferencedAssemblies() on them.
+            if (name.StartsWith("UnityEngine", StringComparison.Ordinal) ||
+                name.StartsWith("UnityEditor", StringComparison.Ordinal) ||
+                name.StartsWith("Unity.", StringComparison.Ordinal) ||
+                name.StartsWith("System.", StringComparison.Ordinal) ||
+                name.StartsWith("Mono.", StringComparison.Ordinal) ||
+                name.StartsWith("nunit.", StringComparison.OrdinalIgnoreCase) ||
+                name.StartsWith("NUnit", StringComparison.Ordinal) ||
+                string.Equals(name, "mscorlib", StringComparison.Ordinal) ||
+                string.Equals(name, "netstandard", StringComparison.Ordinal) ||
+                string.Equals(name, "System", StringComparison.Ordinal))
+                return false;
+
+            // Only scan assemblies that could actually see [ConsoleCommand]:
+            // i.e. they reference NoSlimes.UniTerminal.Runtime.
+            try
+            {
+                return assembly.GetReferencedAssemblies()
+                    .Any(r => string.Equals(r.Name, UniTerminalAssemblyName, StringComparison.Ordinal));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static IEnumerable<Assembly> GetScannableAssemblies(IEnumerable<Assembly> assemblies)
+        {
+            foreach (var assembly in assemblies)
+            {
+                if (ShouldScanAssembly(assembly))
+                    yield return assembly;
+            }
+        }
+
+        private static Type ResolveType(string typeName, Dictionary<string, Type> typeCache)
+        {
+            if (string.IsNullOrEmpty(typeName))
+                return null;
+            if (typeCache != null && typeCache.TryGetValue(typeName, out var cached))
+                return cached;
+
+            var resolved = Type.GetType(typeName, false);
+            if (resolved == null)
+            {
+                int comma = typeName.IndexOf(',');
+                if (comma > 0)
+                {
+                    string fullName = typeName.Substring(0, comma).Trim();
+                    string assemblyShort = typeName.Substring(comma + 1).Split(',')[0].Trim();
+                    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        try
+                        {
+                            if (!string.Equals(asm.GetName().Name, assemblyShort, StringComparison.Ordinal))
+                                continue;
+                            resolved = asm.GetType(fullName, false);
+                            if (resolved != null) break;
+                        }
+                        catch { }
+                    }
+                    if (resolved == null)
+                    {
+                        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                        {
+                            try
+                            {
+                                resolved = asm.GetType(fullName, false);
+                                if (resolved != null) break;
+                            }
+                            catch { }
+                        }
+                    }
+                }
+            }
+
+            if (typeCache != null)
+                typeCache[typeName] = resolved;
+            return resolved;
+        }
+
+        private static bool IsEmptySuggest(ParamSuggest s)
+        {
+            return s == null
+                || ((s.Values == null || s.Values.Length == 0)
+                    && string.IsNullOrEmpty(s.ProviderMethod)
+                    && string.IsNullOrEmpty(s.ProviderTypeName));
+        }
+
+        private static bool SuggestEqual(ParamSuggest a, ParamSuggest b)
+        {
+            if (ReferenceEquals(a, b)) return true;
+            if (IsEmptySuggest(a) && IsEmptySuggest(b)) return true;
+            if (a == null || b == null) return false;
+            return a.ProviderMethod == b.ProviderMethod
+                && a.ProviderTypeName == b.ProviderTypeName
+                && ((a.Values ?? Array.Empty<string>()).SequenceEqual(b.Values ?? Array.Empty<string>()));
         }
 
         private static bool FilterCommand(CommandEntry entry)

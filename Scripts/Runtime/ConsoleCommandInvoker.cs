@@ -156,10 +156,49 @@ namespace NoSlimes.Util.UniTerminal
         private static readonly Dictionary<Type, Func<string, object>> ArgConverters = new();
         private static readonly Dictionary<MethodInfo, MethodInfo> SuggestionMethodCache = new();
         private static readonly Dictionary<Type, UnityEngine.Object> UnityInstanceCache = new();
+        private static readonly Dictionary<Type, Func<AutoCompleteContext, IEnumerable<string>>> TypeSuggesters = new();
+        private static readonly Dictionary<string, Func<AutoCompleteContext, IEnumerable<string>>> CommandSuggesters = new(StringComparer.OrdinalIgnoreCase);
 
         internal static void RegisterArgConverter<T>(Func<string, T> converter)
         {
             ArgConverters[typeof(T)] = arg => converter(arg);
+        }
+
+        public static void RegisterSuggestions<T>(Func<AutoCompleteContext, IEnumerable<string>> provider)
+        {
+            if (provider == null) throw new ArgumentNullException(nameof(provider));
+            TypeSuggesters[typeof(T)] = provider;
+        }
+
+        public static bool UnregisterSuggestions<T>()
+        {
+            return TypeSuggesters.Remove(typeof(T));
+        }
+
+        public static void RegisterSuggestions(string command, string paramName, Func<AutoCompleteContext, IEnumerable<string>> provider)
+        {
+            if (string.IsNullOrWhiteSpace(command)) throw new ArgumentException("Command required.", nameof(command));
+            if (string.IsNullOrWhiteSpace(paramName)) throw new ArgumentException("Param name required.", nameof(paramName));
+            if (provider == null) throw new ArgumentNullException(nameof(provider));
+            CommandSuggesters[SuggestKey(command, paramName)] = provider;
+        }
+
+        public static bool UnregisterSuggestions(string command, string paramName)
+        {
+            if (string.IsNullOrWhiteSpace(command) || string.IsNullOrWhiteSpace(paramName))
+                return false;
+            return CommandSuggesters.Remove(SuggestKey(command, paramName));
+        }
+
+        public static void ClearRegisteredSuggestions()
+        {
+            TypeSuggesters.Clear();
+            CommandSuggesters.Clear();
+        }
+
+        private static string SuggestKey(string command, string paramName)
+        {
+            return command.Trim().ToLowerInvariant() + "|" + paramName.Trim().ToLowerInvariant();
         }
 
         private static string[] Tokenize(string input)
@@ -686,9 +725,106 @@ namespace NoSlimes.Util.UniTerminal
             return helpBuilder.ToString();
         }
 
+        public static IEnumerable<string> GetAutoCompleteSuggestions(CommandEntry entry, int userArgIndex, string prefix, IReadOnlyList<string> typedArgs = null)
+        {
+            if (entry?.MethodInfo == null) return Array.Empty<string>();
+
+            var parameters = entry.MethodInfo.GetParameters();
+            bool hasCallback = parameters.Length > 0 &&
+                (parameters[0].ParameterType == typeof(Action<string>) ||
+                 parameters[0].ParameterType == typeof(Action<string, bool>) ||
+                 parameters[0].ParameterType == typeof(CommandResponseDelegate));
+
+            int paramIndex = hasCallback ? userArgIndex + 1 : userArgIndex;
+            if (paramIndex < 0 || paramIndex >= parameters.Length) return Array.Empty<string>();
+
+            ConsoleCommandRegistry.EnsureSuggestResolvers(entry, null);
+            var resolvers = entry.SuggestResolvers;
+            if (resolvers != null && paramIndex < resolvers.Length && resolvers[paramIndex] != null)
+            {
+                var ctx = new AutoCompleteContext(prefix, userArgIndex, parameters[paramIndex].Name, typedArgs);
+                IEnumerable<string> candidates;
+                try
+                {
+                    candidates = resolvers[paramIndex](ctx);
+                }
+                catch
+                {
+                    return Array.Empty<string>();
+                }
+                return FilterAndOrder(candidates, prefix);
+            }
+
+            if (TryRegisteredSuggestions(entry, parameters[paramIndex], userArgIndex, prefix, typedArgs, out var registered))
+                return registered;
+
+#pragma warning disable 618
+            return GetAutoCompleteSuggestions(entry.MethodInfo, userArgIndex, prefix);
+#pragma warning restore 618
+        }
+
+        private static bool TryRegisteredSuggestions(CommandEntry entry, ParameterInfo parameter, int userArgIndex, string prefix, IReadOnlyList<string> typedArgs, out IEnumerable<string> results)
+        {
+            results = null;
+            string paramName = parameter.Name ?? "";
+
+            if (!string.IsNullOrEmpty(paramName))
+            {
+                string fullKey = SuggestKey(
+                    string.IsNullOrWhiteSpace(entry.Group) ? entry.CommandName : entry.Group + "." + entry.CommandName,
+                    paramName);
+                if (!CommandSuggesters.TryGetValue(fullKey, out var commandProvider))
+                    CommandSuggesters.TryGetValue(SuggestKey(entry.CommandName, paramName), out commandProvider);
+
+                if (commandProvider != null)
+                {
+                    try
+                    {
+                        results = FilterAndOrder(commandProvider(new AutoCompleteContext(prefix, userArgIndex, paramName, typedArgs)), prefix);
+                        return true;
+                    }
+                    catch
+                    {
+                        results = Array.Empty<string>();
+                        return true;
+                    }
+                }
+            }
+
+            Type paramType = Nullable.GetUnderlyingType(parameter.ParameterType) ?? parameter.ParameterType;
+            if (TypeSuggesters.TryGetValue(paramType, out var typeProvider))
+            {
+                try
+                {
+                    results = FilterAndOrder(typeProvider(new AutoCompleteContext(prefix, userArgIndex, paramName, typedArgs)), prefix);
+                    return true;
+                }
+                catch
+                {
+                    results = Array.Empty<string>();
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        internal static IEnumerable<string> FilterAndOrder(IEnumerable<string> candidates, string prefix)
+        {
+            prefix ??= "";
+            // Stable: StartsWith matches first, original provider order kept
+            // within each group (no alphabetical re-sort — "50,250,1000" stays).
+            return (candidates ?? Array.Empty<string>())
+                .Where(s => s != null && s.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
+                .OrderByDescending(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Obsolete("Use GetAutoCompleteSuggestions(CommandEntry, int, string, IReadOnlyList<string>) instead.")]
         public static IEnumerable<string> GetAutoCompleteSuggestions(MethodInfo method, int argIndex, string prefix)
         {
+#pragma warning disable 618
             var attr = method.GetCustomAttribute<ConsoleCommandAttribute>();
+#pragma warning restore 618
             var parameters = method.GetParameters();
 
             bool hasCallback = parameters.Length > 0 &&
@@ -701,6 +837,7 @@ namespace NoSlimes.Util.UniTerminal
 
             var paramType = parameters[argIndex].ParameterType;
 
+#pragma warning disable 618
             if (!string.IsNullOrEmpty(attr?.AutoCompleteProvider))
             {
                 if (!SuggestionMethodCache.TryGetValue(method, out MethodInfo providerMethod))

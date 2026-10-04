@@ -687,15 +687,29 @@ namespace NoSlimes.Util.UniTerminal
                 {
                     if (ConsoleCommandRegistry.Commands.TryGetValue(ctx.Parts[0].ToLower(), out List<ConsoleCommandCache.CommandEntry> entries))
                     {
-                        HashSet<string> suggestions = new();
+                        List<string> ordered = new();
+                        HashSet<string> seen = new();
+                        string[] typedArgs = ctx.Parts.Skip(1).ToArray();
                         foreach (ConsoleCommandCache.CommandEntry entry in entries)
                         {
-                            IEnumerable<string> results = ConsoleCommandInvoker.GetAutoCompleteSuggestions(entry.MethodInfo, hoveredParamIndex, ctx.CurrentPrefix);
-                            foreach (string s in results) suggestions.Add(s);
+                            IEnumerable<string> results;
+                            try
+                            {
+                                results = ConsoleCommandInvoker.GetAutoCompleteSuggestions(entry, hoveredParamIndex, ctx.CurrentPrefix, typedArgs);
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.LogError($"[UniTerminal] Suggest failed for '{entry?.CommandName}': {ex.GetType().Name}: {ex.Message}");
+                                continue;
+                            }
+                            foreach (string s in results)
+                            {
+                                if (seen.Add(s)) ordered.Add(s);
+                            }
                         }
-                        currentMatches = suggestions
+                        currentMatches = ordered
                             .OrderByDescending(s => s.StartsWith(ctx.CurrentPrefix, StringComparison.OrdinalIgnoreCase))
-                            .ThenBy(s => s).ToList();
+                            .ToList();
                     }
                 }
 
