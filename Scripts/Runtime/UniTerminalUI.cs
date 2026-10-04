@@ -45,6 +45,15 @@ namespace NoSlimes.Util.UniTerminal
         [SerializeField] private ScrollRect scrollRect;
         [SerializeField] private TMP_Text consoleLog;
         [SerializeField] private int maxLogLines = 100;
+
+        [Header("Log Filter Bar (optional)")]
+        [SerializeField] private Toggle logsFilterToggle;
+        [SerializeField] private Toggle warningsFilterToggle;
+        [SerializeField] private Toggle errorsFilterToggle;
+        [SerializeField] private TMP_Text logsFilterLabel;
+        [SerializeField] private TMP_Text warningsFilterLabel;
+        [SerializeField] private TMP_Text errorsFilterLabel;
+        [SerializeField] private Color filterDisabledTint = Color.white;
         [SerializeField] private bool dontDestroyOnLoad = true;
         [SerializeField] private bool catchUnityLogs = true;
         [SerializeField] private bool controlCursorLockMode = true;
@@ -64,10 +73,23 @@ namespace NoSlimes.Util.UniTerminal
         [SerializeField] private int inputFontSize = 14;
         [SerializeField] private int logFontSize = 20;
 
-        private readonly List<string> logHistory = new();
+        private readonly List<LogEntry> logHistory = new();
         private readonly List<string> commandHistory = new();
         private int commandHistoryIndex = -1;
         private CursorLockMode originalCursorLockMode;
+
+        private bool showLogs = true;
+        private bool showWarnings = true;
+        private bool showErrors = true;
+        private int lastLogCount = -1;
+        private int lastWarningCount = -1;
+        private int lastErrorCount = -1;
+        private Color logsToggleColor = Color.white;
+        private Color warningsToggleColor = Color.white;
+        private Color errorsToggleColor = Color.white;
+        private ColorBlock logsToggleColors;
+        private ColorBlock warningsToggleColors;
+        private ColorBlock errorsToggleColors;
 
         // Autocomplete state
         private string lastTypedPrefix = "";
@@ -204,6 +226,36 @@ namespace NoSlimes.Util.UniTerminal
                 autoCompleteIndex = -1;
             });
 
+            if (logsFilterToggle != null)
+                logsFilterToggle.onValueChanged.AddListener(OnLogsFilterChanged);
+            if (warningsFilterToggle != null)
+                warningsFilterToggle.onValueChanged.AddListener(OnWarningsFilterChanged);
+            if (errorsFilterToggle != null)
+                errorsFilterToggle.onValueChanged.AddListener(OnErrorsFilterChanged);
+
+            if (logsFilterToggle != null)
+            {
+                if (logsFilterToggle.targetGraphic != null)
+                    logsToggleColor = logsFilterToggle.targetGraphic.color;
+                logsToggleColors = logsFilterToggle.colors;
+            }
+            if (warningsFilterToggle != null)
+            {
+                if (warningsFilterToggle.targetGraphic != null)
+                    warningsToggleColor = warningsFilterToggle.targetGraphic.color;
+                warningsToggleColors = warningsFilterToggle.colors;
+            }
+            if (errorsFilterToggle != null)
+            {
+                if (errorsFilterToggle.targetGraphic != null)
+                    errorsToggleColor = errorsFilterToggle.targetGraphic.color;
+                errorsToggleColors = errorsFilterToggle.colors;
+            }
+
+            SyncFilterToggles();
+            lastLogCount = lastWarningCount = lastErrorCount = -1;
+            RefreshFilterLabels();
+
             consolePanel.SetActive(false);
 
 #if ENABLE_INPUT_SYSTEM
@@ -265,6 +317,13 @@ namespace NoSlimes.Util.UniTerminal
 
             inputField.onSubmit.RemoveAllListeners();
             inputField.onValueChanged.RemoveAllListeners();
+
+            if (logsFilterToggle != null)
+                logsFilterToggle.onValueChanged.RemoveListener(OnLogsFilterChanged);
+            if (warningsFilterToggle != null)
+                warningsFilterToggle.onValueChanged.RemoveListener(OnWarningsFilterChanged);
+            if (errorsFilterToggle != null)
+                errorsFilterToggle.onValueChanged.RemoveListener(OnErrorsFilterChanged);
 
 #if ENABLE_INPUT_SYSTEM
             if (inputSystem == InputSystemType.New)
@@ -388,6 +447,7 @@ namespace NoSlimes.Util.UniTerminal
 
             _instance.logHistory.Clear();
             _instance.consoleLog.text = "";
+            _instance.RefreshFilterLabels();
         }
 
         private void HandleLogMessage(string logString, string stackTrace, LogType type)
@@ -407,7 +467,7 @@ namespace NoSlimes.Util.UniTerminal
                 _ => "#FFFFFFFF",
             };
 
-            LogToConsole($"<color={color}>{logString}</color>");
+            LogToConsole($"<color={color}>{logString}</color>", type);
             return;
 
             static string FormatColorLocal(Color color)
@@ -449,18 +509,143 @@ namespace NoSlimes.Util.UniTerminal
 
         private void LogToConsole(string message)
         {
-            logHistory.Add(message);
-            if (logHistory.Count > maxLogLines)
-                logHistory.RemoveRange(0, logHistory.Count - maxLogLines);
+            logHistory.Add(new LogEntry(message, null));
+            TrimAndRefreshLog();
+        }
 
-            consoleLog.text = string.Join("\n", logHistory);
-            StartCoroutine(ScrollToBottomCoroutine());
+        private void LogToConsole(string message, LogType type)
+        {
+            logHistory.Add(new LogEntry(message, type));
+            TrimAndRefreshLog();
         }
 
         private void LogToConsole(string message, bool success)
         {
             string color = success ? ColorUtility.ToHtmlStringRGBA(textColor) : ColorUtility.ToHtmlStringRGBA(errorColor);
-            LogToConsole($"<color=#{color}>{message}</color>");
+            logHistory.Add(new LogEntry($"<color=#{color}>{message}</color>", success ? LogType.Log : LogType.Error));
+            TrimAndRefreshLog();
+        }
+
+        private void TrimAndRefreshLog()
+        {
+            if (logHistory.Count > maxLogLines)
+                logHistory.RemoveRange(0, logHistory.Count - maxLogLines);
+
+            consoleLog.text = string.Join("\n", logHistory.Where(PassesFilter).Select(e => e.Text));
+            RefreshFilterLabels();
+            StartCoroutine(ScrollToBottomCoroutine());
+        }
+
+        private bool PassesFilter(LogEntry entry)
+        {
+            return entry.Type switch
+            {
+                null => true,
+                LogType.Log => showLogs,
+                LogType.Warning => showWarnings,
+                _ => showErrors,
+            };
+        }
+
+        public static void SetLogFilter(bool showLogs, bool showWarnings, bool showErrors)
+        {
+            if (_instance == null) return;
+
+            _instance.showLogs = showLogs;
+            _instance.showWarnings = showWarnings;
+            _instance.showErrors = showErrors;
+            _instance.SyncFilterToggles();
+            _instance.TrimAndRefreshLog();
+        }
+
+        private void OnLogsFilterChanged(bool show)
+        {
+            showLogs = show;
+            SyncFilterToggles();
+            TrimAndRefreshLog();
+            FocusInputField();
+        }
+
+        private void OnWarningsFilterChanged(bool show)
+        {
+            showWarnings = show;
+            SyncFilterToggles();
+            TrimAndRefreshLog();
+            FocusInputField();
+        }
+
+        private void OnErrorsFilterChanged(bool show)
+        {
+            showErrors = show;
+            SyncFilterToggles();
+            TrimAndRefreshLog();
+            FocusInputField();
+        }
+
+        private void SyncFilterToggles()
+        {
+            SyncFilterToggle(logsFilterToggle, logsToggleColors, logsToggleColor, showLogs);
+            SyncFilterToggle(warningsFilterToggle, warningsToggleColors, warningsToggleColor, showWarnings);
+            SyncFilterToggle(errorsFilterToggle, errorsToggleColors, errorsToggleColor, showErrors);
+        }
+
+        private void SyncFilterToggle(Toggle toggle, ColorBlock authoredColors, Color authoredTargetColor, bool show)
+        {
+            if (toggle == null)
+                return;
+
+            toggle.SetIsOnWithoutNotify(show);
+            if (show)
+            {
+                toggle.colors = authoredColors;
+                if (toggle.targetGraphic != null)
+                    toggle.targetGraphic.color = authoredTargetColor;
+            }
+            else
+            {
+                var colors = toggle.colors;
+                colors.normalColor = filterDisabledTint;
+                colors.highlightedColor = filterDisabledTint;
+                colors.pressedColor = filterDisabledTint;
+                colors.selectedColor = filterDisabledTint;
+                toggle.colors = colors;
+                if (toggle.targetGraphic != null)
+                    toggle.targetGraphic.color = filterDisabledTint;
+            }
+        }
+
+        private void RefreshFilterLabels()
+        {
+            int logs = 0, warnings = 0, errors = 0;
+            foreach (var entry in logHistory)
+            {
+                switch (entry.Type)
+                {
+                    case null:
+                    case LogType.Log: logs++; break;
+                    case LogType.Warning: warnings++; break;
+                    default: errors++; break;
+                }
+            }
+
+            if (logs == lastLogCount && warnings == lastWarningCount && errors == lastErrorCount)
+                return;
+
+            lastLogCount = logs;
+            lastWarningCount = warnings;
+            lastErrorCount = errors;
+
+            SetFilterLabel(logsFilterLabel, logs);
+            SetFilterLabel(warningsFilterLabel, warnings);
+            SetFilterLabel(errorsFilterLabel, errors);
+        }
+
+        private static void SetFilterLabel(TMP_Text label, int count)
+        {
+            if (label == null)
+                return;
+
+            label.text = count > 999 ? "999+" : count.ToString();
         }
 
         private IEnumerator ScrollToBottomCoroutine()
@@ -792,6 +977,17 @@ namespace NoSlimes.Util.UniTerminal
             public int CurrentPartIndex;
             public string CurrentPrefix;
             public bool IsHelp;
+        }
+
+        private readonly struct LogEntry
+        {
+            public string Text { get; }
+            public LogType? Type { get; }
+            public LogEntry(string text, LogType? type)
+            {
+                Text = text;
+                Type = type;
+            }
         }
     }
 }

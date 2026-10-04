@@ -96,6 +96,8 @@ namespace NoSlimes.Util.UniTerminal
         /// <param name="show">If true, opens the console. If false, closes it.</param>
         public static void ShowTerminalUI(bool show) => UniTerminalUI.ShowConsole(show);
 
+        public static void SetLogFilter(bool showLogs, bool showWarnings, bool showErrors) => UniTerminalUI.SetLogFilter(showLogs, showWarnings, showErrors);
+
         /// <summary>
         /// Toggles the visibility of the terminal UI based on its current state.
         /// </summary>

@@ -295,7 +295,7 @@ namespace NoSlimes.Util.UniTerminal
                 _aliasLookup.Clear();
             }
 
-            assemblies ??= AppDomain.CurrentDomain.GetAssemblies();
+            assemblies ??= GetLoadedAssemblies();
             if (applyFilter)
                 assemblies = GetScannableAssemblies(assemblies);
             var validCommands = new List<CommandEntry>();
@@ -325,7 +325,7 @@ namespace NoSlimes.Util.UniTerminal
 
         internal static async Task DiscoverCommandsAsync(IEnumerable<Assembly> assemblies = null, bool overwrite = true, Action<float, string> onProgress = null)
         {
-            var assemblyList = GetScannableAssemblies(assemblies ?? AppDomain.CurrentDomain.GetAssemblies()).ToArray();
+            var assemblyList = GetScannableAssemblies(assemblies ?? GetLoadedAssemblies()).ToArray();
             int total = assemblyList.Length;
 
             var results = await Task.Run(() =>
@@ -673,7 +673,8 @@ namespace NoSlimes.Util.UniTerminal
                 {
                     string fullName = typeName.Substring(0, comma).Trim();
                     string assemblyShort = typeName.Substring(comma + 1).Split(',')[0].Trim();
-                    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                    var loaded = GetLoadedAssemblies();
+                    foreach (var asm in loaded)
                     {
                         try
                         {
@@ -686,7 +687,7 @@ namespace NoSlimes.Util.UniTerminal
                     }
                     if (resolved == null)
                     {
-                        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                        foreach (var asm in loaded)
                         {
                             try
                             {
@@ -702,6 +703,15 @@ namespace NoSlimes.Util.UniTerminal
             if (typeCache != null)
                 typeCache[typeName] = resolved;
             return resolved;
+        }
+
+        private static Assembly[] GetLoadedAssemblies()
+        {
+            // No Unity runtime equivalent for name-based type fallback; load-time
+            // only, per-assembly guarded, results cached in the caller's dict.
+#pragma warning disable UAC0005
+            return AppDomain.CurrentDomain.GetAssemblies();
+#pragma warning restore UAC0005
         }
 
         private static bool IsEmptySuggest(ParamSuggest s)

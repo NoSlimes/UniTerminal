@@ -34,6 +34,14 @@ namespace NoSlimes.Util.UniTerminal.Editor
         private SerializedProperty consoleLogProp;
         private SerializedProperty maxLogLinesProp;
 
+        private SerializedProperty logsFilterToggleProp;
+        private SerializedProperty warningsFilterToggleProp;
+        private SerializedProperty errorsFilterToggleProp;
+        private SerializedProperty logsFilterLabelProp;
+        private SerializedProperty warningsFilterLabelProp;
+        private SerializedProperty errorsFilterLabelProp;
+        private SerializedProperty filterDisabledTintProp;
+
         private SerializedProperty dontDestroyOnLoadProp;
         private SerializedProperty catchUnityLogsProp;
         private SerializedProperty controlCursorLockModeProp;
@@ -78,6 +86,14 @@ namespace NoSlimes.Util.UniTerminal.Editor
             scrollRectProp = serializedObject.FindProperty("scrollRect");
             consoleLogProp = serializedObject.FindProperty("consoleLog");
             maxLogLinesProp = serializedObject.FindProperty("maxLogLines");
+
+            logsFilterToggleProp = serializedObject.FindProperty("logsFilterToggle");
+            warningsFilterToggleProp = serializedObject.FindProperty("warningsFilterToggle");
+            errorsFilterToggleProp = serializedObject.FindProperty("errorsFilterToggle");
+            logsFilterLabelProp = serializedObject.FindProperty("logsFilterLabel");
+            warningsFilterLabelProp = serializedObject.FindProperty("warningsFilterLabel");
+            errorsFilterLabelProp = serializedObject.FindProperty("errorsFilterLabel");
+            filterDisabledTintProp = serializedObject.FindProperty("filterDisabledTint");
 
             dontDestroyOnLoadProp = serializedObject.FindProperty("dontDestroyOnLoad");
             catchUnityLogsProp = serializedObject.FindProperty("catchUnityLogs");
@@ -160,6 +176,19 @@ namespace NoSlimes.Util.UniTerminal.Editor
                 EditorGUILayout.PropertyField(catchUnityLogsProp);
                 EditorGUILayout.PropertyField(controlCursorLockModeProp);
                 EditorGUILayout.PropertyField(loadCacheOnAwakeProp);
+            });
+
+            // --- Section: Log Filter Bar ---
+            DrawSection("Log Filter Bar (optional)", () =>
+            {
+                EditorGUILayout.PropertyField(logsFilterToggleProp);
+                EditorGUILayout.PropertyField(warningsFilterToggleProp);
+                EditorGUILayout.PropertyField(errorsFilterToggleProp);
+                EditorGUILayout.PropertyField(logsFilterLabelProp);
+                EditorGUILayout.PropertyField(warningsFilterLabelProp);
+                EditorGUILayout.PropertyField(errorsFilterLabelProp);
+                EditorGUILayout.PropertyField(filterDisabledTintProp);
+                EditorGUILayout.HelpBox("Assign Toggles (and optional count Labels) to filter log severities at runtime. Leave empty to control filtering via UniTerminal.SetLogFilter instead.", MessageType.None);
             });
 
             // --- Section: Visuals ---
