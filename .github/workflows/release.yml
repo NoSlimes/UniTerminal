@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "[0-9]*.[0-9]*.[0-9]*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check tag matches package.json
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")
+          if [ "$TAG" != "$VER" ]; then
+            echo "Tag v$TAG does not match package.json version $VER"
+            exit 1
+          fi
+
+      - name: Pack package zip
+        run: git archive --format=zip -o uniterminal-${GITHUB_REF_NAME}.zip HEAD
+
+      - name: Create GitHub Release
+        run: gh release create "${GITHUB_REF_NAME}" "uniterminal-${GITHUB_REF_NAME}.zip" --title "${GITHUB_REF_NAME}" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
