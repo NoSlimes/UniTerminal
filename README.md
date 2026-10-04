@@ -1,3 +1,8 @@
+# UniTerminal
+![Release](https://img.shields.io/github/v/release/NoSlimes/UniTerminal)
+![License](https://img.shields.io/github/license/NoSlimes/UniTerminal)
+![Unity](https://img.shields.io/badge/Unity-6000%2B-black)
+
 ## Setup
 
 Use the menu to create and add the Developer Console prefab to your scene:  
