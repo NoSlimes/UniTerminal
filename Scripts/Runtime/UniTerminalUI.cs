@@ -932,7 +932,7 @@ namespace NoSlimes.Util.UniTerminal
 #endif
 
         #region Built-in basic commands
-        [ConsoleCommand("help", Description = "Shows a list of commands or details for one command.")]
+        [ConsoleCommand("help", Description = "Shows a list of commands or details for one command.", AllowInEditor = true)]
         [CommandAlias("h")]
         private static void HelpCommand(Action<string> response, string commandName = "")
         {
@@ -940,11 +940,11 @@ namespace NoSlimes.Util.UniTerminal
             response(output);
         }
 
-        [ConsoleCommand("clear", Description = "Clears the console log.")]
+        [ConsoleCommand("clear", Description = "Clears the console log.", AllowInEditor = true)]
         [CommandAlias("c")]
         private static void ClearCommand() => ClearLog();
 
-        [ConsoleCommand("toggleUnityLogs", Description = "Toggles display of unity debug logs")]
+        [ConsoleCommand("toggleUnityLogs", Description = "Toggles display of unity debug logs", AllowInEditor = true)]
         [CommandAlias("logs")]
         private static void ToggleUnityLogsCommand(Action<string> response)
         {

@@ -21,7 +21,7 @@ namespace NoSlimes.Util.UniTerminal.Editor
                 return;
             }
 
-            var existing = Object.FindFirstObjectByType<UniTerminalUI>(FindObjectsInactive.Include);
+            var existing = Object.FindAnyObjectByType<UniTerminalUI>(FindObjectsInactive.Include);
             if (existing != null)
             {
                 Debug.LogWarning("[UniTerminal] A UniTerminal instance already exists in this scene. Selecting it instead of duplicating.");

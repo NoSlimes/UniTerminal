@@ -17,7 +17,8 @@ namespace NoSlimes.Util.UniTerminal
             public string[] Aliases;
             public string Description;
             public CommandFlags Flags;
-            
+            public bool AllowInEditor;
+
             public string AutoCompleteProvider;
 
             // Binding info

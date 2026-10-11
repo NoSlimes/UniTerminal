@@ -10,11 +10,13 @@ namespace NoSlimes.Util.UniTerminal
         public bool IsAutoRebuildEnabled { get => isAutoRebuildEnabled; set => isAutoRebuildEnabled = value; }
         public bool IncludeBuiltInCommands { get => includeBuiltInCommands; set => includeBuiltInCommands = value; }
         public bool IncludeCheatCommand { get => includeCheatCommand; set => includeCheatCommand = value; }
+        public bool IncludeEditorBuiltInCommands { get => includeEditorBuiltInCommands; set => includeEditorBuiltInCommands = value; }
         public bool IsDetailedLoggingEnabled { get => isDetailedLoggingEnabled; set => isDetailedLoggingEnabled = value; }
 
         [SerializeField] private bool isAutoRebuildEnabled = true;
         [SerializeField] private bool includeBuiltInCommands = true;
         [SerializeField] private bool includeCheatCommand = true;
+        [SerializeField] private bool includeEditorBuiltInCommands = true;
         [SerializeField] private bool isDetailedLoggingEnabled = false;
 
         internal void Save()

@@ -204,6 +204,7 @@ namespace NoSlimes.Util.UniTerminal
                 Group = attr.Group,
                 Description = attr.Description,
                 Flags = attr.Flags,
+                AllowInEditor = attr.AllowInEditor,
 #pragma warning disable 618
                 AutoCompleteProvider = attr.AutoCompleteProvider,
 #pragma warning restore 618
@@ -420,6 +421,7 @@ namespace NoSlimes.Util.UniTerminal
                 || a.Group != b.Group
                 || a.Description != b.Description
                 || a.Flags != b.Flags
+                || a.AllowInEditor != b.AllowInEditor
 #pragma warning disable 618
                 || a.AutoCompleteProvider != b.AutoCompleteProvider
 #pragma warning restore 618

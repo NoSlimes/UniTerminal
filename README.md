@@ -143,6 +143,10 @@ Commands can include **flags** to control when and how they are available. Flags
 | `Mod` | Command is added by a mod or external plugin. |
 | `Hidden` | Command is hidden from help listings, but can still be invoked. |
 
+> **Editor commands:** `AllowInEditor` is not a flag — it is a separate opt-in property on
+> `[ConsoleCommand]` (see section 10). `EditorOnly` means "editor builds + editor playmode".
+> `AllowInEditor = true` means "also runnable in edit mode (not playing) via the editor command window".
+
 **Cheat Commands Note:**
 
 * UniTerminal includes a built-in `enablecheats` command to toggle cheat commands globally.  
@@ -260,6 +264,7 @@ These settings modify the **Scripting Define Symbols** of your project. Changing
 | :--- | :--- |
 | **Include Built-In Commands** | If enabled, includes additional utility commands (e.g. time scale or system info). <br><br>Note: The core commands help, clear, and toggleUnityLogs are essential to the system and are always included, regardless of this setting. |
 | **Include Built-In Cheat Command** | If enabled, the enablecheats command is available. Disable this for release builds if you want to prevent users from easily toggling cheat mode (or if you want to implement your own cheat logic). |
+| **Include Built-In Editor Commands** | *(2.7+)* If enabled, ships pre-built editor commands (`saveall`, `play`, `settings`, … — see section 10). Editor-assembly only, so they can never ship in builds. |
 
 #### Editor Workflow
 These settings only affect the Unity Editor environment and are saved in `EditorPrefs`.
@@ -323,3 +328,33 @@ public void LoadMod(string path)
 ```
 
 > **Note:** Do not call this for your main game assembly (`Assembly-CSharp`) if you are using the default setup, as those commands are already optimized and cached. This method is specifically for code loaded **after** the game has started.
+
+---
+
+### 10. Editor Commands (`AllowInEditor`) & Command Window
+
+> As of **2.6**, UniTerminal commands can also run in the Unity Editor **without entering
+> playmode**, e.g. for scene/asset tooling, validation, batch operations, or spawning test content.
+
+Open the window via `Tools → UniTerminal → Command Window`.
+
+#### Opting in
+
+Add `AllowInEditor = true` to the attribute. It is **opt-in** (default `false`), orthogonal to
+`CommandFlags`:
+
+```csharp
+[ConsoleCommand("spawn_test_cube", Description = "Spawns a test cube in the scene.", AllowInEditor = true)]
+public static void SpawnTestCube(Action<string> response)
+{
+    var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+    Undo.RegisterCreatedObjectUndo(cube, "Spawn test cube");
+    response("Spawned test cube.");
+}
+```
+
+> **Safety:** commands that modify scenes or assets should handle `Undo` and dirty marking
+> themselves (e.g. `Undo.RegisterCreatedObjectUndo`, `EditorUtility.SetDirty`,
+> `EditorSceneManager.MarkSceneDirty`). The command window groups each run in an Undo group,
+> but static modifications are only undoable if the command registers them.
+

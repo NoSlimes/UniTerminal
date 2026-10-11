@@ -98,6 +98,10 @@ namespace NoSlimes.Util.UniTerminal.Editor
             includeCheatToggle.OnValueChanged += SetIncludeCheatCommand;
             runtimeSection.Add(includeCheatToggle);
 
+            ToggleButton includeEditorBuiltInToggle = new("Include Built-In Editor Commands in Cache", settings.IncludeEditorBuiltInCommands);
+            includeEditorBuiltInToggle.OnValueChanged += SetIncludeEditorBuiltInCommands;
+            runtimeSection.Add(includeEditorBuiltInToggle);
+
             root.Add(runtimeSection);
 
             // Editor section
@@ -171,6 +175,18 @@ namespace NoSlimes.Util.UniTerminal.Editor
                 UniTerminalDefines.EnableBuiltinCheatCommand();
             else
                 UniTerminalDefines.DisableBuiltinCheatCommand();
+
+            SaveSettings();
+        }
+
+        private void SetIncludeEditorBuiltInCommands(bool value)
+        {
+            settings.IncludeEditorBuiltInCommands = value;
+
+            if (settings.IncludeEditorBuiltInCommands)
+                UniTerminalDefines.EnableEditorBuiltInCommands();
+            else
+                UniTerminalDefines.DisableEditorBuiltInCommands();
 
             SaveSettings();
         }

@@ -20,6 +20,8 @@ namespace NoSlimes.Util.UniTerminal
         public string Group { get; set; } = "";
         public string Description { get; set; } = "";
         public CommandFlags Flags { get; set; } = CommandFlags.None;
+        /// <summary>Allows execution from the editor command window in edit mode (not playing).</summary>
+        public bool AllowInEditor { get; set; } = false;
         [Obsolete("Use [Suggest]/[SuggestValues] on parameters instead.")]
         public string AutoCompleteProvider { get; set; } = "";
 

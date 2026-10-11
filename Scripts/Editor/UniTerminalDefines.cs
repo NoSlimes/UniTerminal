@@ -13,12 +13,14 @@ namespace NoSlimes.Util.UniTerminal.Editor
         private static readonly string UNITERMINAL_DEFINE = "UNITERMINAL";
         private static readonly string UNITERMINAL_BUILTIN = "UNITERMINAL_BUILTIN";
         private static readonly string UNITERMINAL_ENABLECHEATS = "UNITERMINAL_ENABLECHEATS";
+        private static readonly string UNITERMINAL_EDITOR_BUILTIN = "UNITERMINAL_EDITOR_BUILTIN";
 
         internal static string KeyPrefix => $"{PlayerSettings.companyName}_{PlayerSettings.productName}_{PlayerSettings.productGUID}";
 
         internal static string AutoRebuildCacheKey => $"{KeyPrefix}_UniTerminal_AutoRebuildCache";
         internal static string IncludeBuiltInCommandsKey => $"{KeyPrefix}_UniTerminal_IncludeBuiltInCommands";
         internal static string IncludeCheatCommandKey => $"{KeyPrefix}_UniTerminal_IncludeCheatCommand";
+        internal static string IncludeEditorBuiltInCommandsKey => $"{KeyPrefix}_UniTerminal_IncludeEditorBuiltInCommands";
         internal static string DetailedLoggingKey => $"{KeyPrefix}_UniTerminal_DetailedLogging";
 
         static UniTerminalDefines()
@@ -35,6 +37,11 @@ namespace NoSlimes.Util.UniTerminal.Editor
                 else
                     DisableBuiltinCheatCommand();
 
+                if (UniTerminalSettings.instance.IncludeEditorBuiltInCommands)
+                    EnableEditorBuiltInCommands();
+                else
+                    DisableEditorBuiltInCommands();
+
                 EditorApplication.delayCall -= ApplyDefines;
             }
 
@@ -48,6 +55,9 @@ namespace NoSlimes.Util.UniTerminal.Editor
 
         public static void EnableBuiltinCheatCommand() => DefineSymbol(UNITERMINAL_ENABLECHEATS);
         public static void DisableBuiltinCheatCommand() => UndefineSymbol(UNITERMINAL_ENABLECHEATS);
+
+        public static void EnableEditorBuiltInCommands() => DefineSymbol(UNITERMINAL_EDITOR_BUILTIN);
+        public static void DisableEditorBuiltInCommands() => UndefineSymbol(UNITERMINAL_EDITOR_BUILTIN);
 
         private static void DefineSymbol(string symbol)
         {

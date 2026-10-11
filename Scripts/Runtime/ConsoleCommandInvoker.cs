@@ -458,10 +458,16 @@ namespace NoSlimes.Util.UniTerminal
                         return true;
                     }
 
+                    bool isEditMode = !Application.isPlaying;
+
+                    if (isEditMode && !attr.AllowInEditor &&
+                        BlockLocal("not allowed in the editor (AllowInEditor = false)")) return;
+
                     if (attr.Flags.HasFlag(CommandFlags.Cheat) && !CheatsEnabled &&
                         BlockLocal("cheats are disabled")) return;
 
-                    if (attr.Flags.HasFlag(CommandFlags.DebugOnly) && !Debug.isDebugBuild &&
+                    // Edit mode is always treated as a dev environment.
+                    if (!isEditMode && attr.Flags.HasFlag(CommandFlags.DebugOnly) && !Debug.isDebugBuild &&
                         BlockLocal("debug-only commands are not allowed in this build")) return;
 
                     if (attr.Flags.HasFlag(CommandFlags.EditorOnly) && !Application.isEditor &&
@@ -498,6 +504,12 @@ namespace NoSlimes.Util.UniTerminal
             return string.Join(", ", pars);
         }
 
+        /// <summary>True outside of playmode. Always false in builds.</summary>
+        public static bool IsEditMode => !Application.isPlaying;
+
+        /// <summary>Whether the entry may run in the editor command window in edit mode.</summary>
+        public static bool CanExecuteInEditor(CommandEntry entry) => entry != null && entry.AllowInEditor;
+
         private static object ResolveTarget(MethodInfo method)
         {
             if (method.IsStatic) return null;
@@ -515,7 +527,7 @@ namespace NoSlimes.Util.UniTerminal
 
             if (targetType.IsSubclassOf(typeof(UnityEngine.Object)))
             {
-                targetInstance = UnityEngine.Object.FindFirstObjectByType(targetType);
+                targetInstance = UnityEngine.Object.FindAnyObjectByType(targetType, FindObjectsInactive.Include);
 
                 if (targetInstance != null)
                 {
@@ -533,6 +545,9 @@ namespace NoSlimes.Util.UniTerminal
         public static string GetHelp(string commandName = "")
         {
             StringBuilder helpBuilder = new();
+            bool editMode = IsEditMode;
+
+            static bool VisibleInMode(CommandEntry e, bool editMode) => !editMode || (e != null && e.AllowInEditor);
 
             static string FormatDefault(object value)
             {
@@ -576,6 +591,8 @@ namespace NoSlimes.Util.UniTerminal
                 foreach (var kv in ConsoleCommandRegistry.AliasLookup)
                 {
                     var entry = kv.Value;
+                    if (!VisibleInMode(entry, editMode))
+                        continue;
                     var entryKey = string.IsNullOrWhiteSpace(entry.Group)
                         ? entry.CommandName.ToLower()
                         : $"{entry.Group.ToLower()}.{entry.CommandName.ToLower()}";
@@ -591,7 +608,15 @@ namespace NoSlimes.Util.UniTerminal
 
             void AppendCommandLine(string name, IEnumerable<CommandEntry> entries)
             {
-                var list = entries.Distinct().ToList();
+                // One compact line per overload: `  <args> — <description>`.
+                // Fully-hidden commands are omitted entirely (Hidden = hidden from listings).
+                var list = entries.Distinct()
+                    .Where(e => VisibleInMode(e, editMode))
+                    .Where(e => !e.Flags.HasFlag(CommandFlags.Hidden))
+                    .ToList();
+                if (list.Count == 0)
+                    return;
+
                 var aliases = GetAliasesForKey(name);
 
                 string aliasText = aliases.Count > 0
@@ -605,27 +630,15 @@ namespace NoSlimes.Util.UniTerminal
 
                 foreach (var entry in list)
                 {
-                    if (entry.Flags.HasFlag(CommandFlags.Hidden))
-                        continue;
-
                     var parameters = entry.MethodInfo.GetParameters();
 
-                    var visibleParams = parameters
+                    string args = string.Join(" ", parameters
                         .Where(p => !IsInternalDelegate(p))
-                        .Select(FormatParameter);
+                        .Select(FormatParameter));
 
-                    string args = string.Join(" ", visibleParams);
-
-                    helpBuilder.AppendLine(
-                        $"  {Colorize("", Settings.Help_CommandColor)} {args}"
-                    );
-
-                    helpBuilder.AppendLine(
-                        $"    {Colorize(entry.Description, Settings.Help_MutedColor)}"
-                    );
+                    string desc = Colorize(entry.Description, Settings.Help_MutedColor);
+                    helpBuilder.AppendLine(string.IsNullOrEmpty(args) ? $"  {desc}" : $"  {args} — {desc}");
                 }
-
-                helpBuilder.AppendLine();
             }
 
             // =========================
@@ -633,7 +646,7 @@ namespace NoSlimes.Util.UniTerminal
             // =========================
             if (string.IsNullOrEmpty(commandName))
             {
-                helpBuilder.AppendLine(Colorize("Available Commands:", Settings.Help_SectionColor));
+                helpBuilder.AppendLine(Colorize(editMode ? "Available Commands (editor — AllowInEditor only):" : "Available Commands:", Settings.Help_SectionColor));
                 helpBuilder.AppendLine();
 
                 foreach (var kv in ConsoleCommandRegistry.Commands.OrderBy(c => c.Key))
@@ -677,7 +690,17 @@ namespace NoSlimes.Util.UniTerminal
                 return helpBuilder.ToString();
             }
 
-            var entriesSingle = entryList.Distinct().ToList();
+            var entriesSingle = entryList.Distinct().Where(e => VisibleInMode(e, editMode)).ToList();
+            if (entriesSingle.Count == 0)
+            {
+                helpBuilder.AppendLine(
+                    Colorize(editMode
+                        ? $"Command '{cmdName}' is not available in the editor (AllowInEditor = false)."
+                        : $"Unknown command: '{cmdName}'", Settings.WarningColor)
+                );
+
+                return helpBuilder.ToString();
+            }
             var aliasesSingle = GetAliasesForKey(cmdName);
 
             string aliasLine = aliasesSingle.Count > 0
@@ -704,22 +727,17 @@ namespace NoSlimes.Util.UniTerminal
 
                 var visibleParams = parameters
                     .Where(p => !IsInternalDelegate(p))
-                    .Select(FormatParameter);
+                    .Select(FormatParameter)
+                    .ToArray();
 
-                string args = string.Join(" ", visibleParams);
-
-                helpBuilder.AppendLine(
-                    $"{Colorize("Description:", Settings.Help_MutedColor)} {entry.Description}"
-                );
-
-                if (visibleParams.Any())
+                if (visibleParams.Length > 0)
                 {
                     helpBuilder.AppendLine(
-                        $"{Colorize("Usage:", Settings.Help_MutedColor)} {entry.CommandName} {args}"
+                        $"{Colorize("Usage:", Settings.Help_MutedColor)} {entry.CommandName} {string.Join(" ", visibleParams)}"
                     );
                 }
 
-                helpBuilder.AppendLine();
+                helpBuilder.AppendLine($"  {Colorize(entry.Description, Settings.Help_MutedColor)}");
             }
 
             return helpBuilder.ToString();
